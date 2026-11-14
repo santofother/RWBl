@@ -2,7 +2,7 @@ extends Node3D
 ## Offline test drive (F6 on test_drive.tscn): one Chariot on the Track, driven by PlayerInput, chase camera,
 ## speed / stamina / surface label, and a few surface patches (oil, mud, ice, gravel) to feel the grip.
 ## Owner: C04. No network: this script calls Chariot.step() itself.
-## Keys: W/S throttle/brake, A/D steer, Space whip, R respawn, J jump (test ramp launch), 1/2 break a wheel,
+## Keys: W/S throttle/brake, A/D steer, Shift whip, R respawn, Space jump (test ramp launch), 1/2 break a wheel,
 ## F2 or ` tuning panel. Every key prints `[Game] TestDrive ...` and shows a message for 3 s.
 ## NET: none (local only).
 ## Public API: none.
@@ -64,9 +64,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_R:
 			c.respawn(_track.respawn_transform(_track.progress_at(c.global_position)))
 			_toast("R: respawned on the track centre line, standing still, wheels repaired")
-		KEY_J:
+		KEY_SPACE:
 			c.apply_impulse(Vector3.UP * 10.0 * c.tuning.horse_mass)
-			_toast("J: launched up (like a ramp) - watch it land")
+			_toast("Space: launched up (like a ramp) - watch it land")
 		KEY_1:
 			c.damage_wheel(ChariotSnapshot.WHEEL_LEFT)
 			_toast("1: left wheel broken - cart tilts, slower, pulls left. R repairs")
@@ -92,7 +92,7 @@ func _process(delta: float) -> void:
 	_cam.look_at(c.global_position + c.get_forward() * 3.0 + Vector3.UP * 1.0)
 	_msg_t -= delta
 	var lines := PackedStringArray([
-		"TEST DRIVE  (keys: W/S drive  A/D steer  Space whip  R respawn  J jump  1/2 break wheel  ` or F2 tuning)",
+		"TEST DRIVE  (keys: W/S drive  A/D steer  Shift whip  R respawn  Space jump  1/2 break wheel  ` or F2 tuning)",
 		"speed %4.1f m/s   stamina %3d%%   surface %s" % [c.get_speed(), int(c.stamina * 100.0), c.surface],
 		"cart %+4.0f°   slip %+4.0f°   %s%s" % [rad_to_deg(c.cart_angle), _slip_deg(c),
 			"BOOST " if c.has_effect(Effects.BOOST) else "", "" if c.grounded else "AIR"],

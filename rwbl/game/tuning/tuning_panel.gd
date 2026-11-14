@@ -153,7 +153,7 @@ func _build_ui() -> void:
 	head.add_child(title)
 	var save := Button.new()
 	save.text = "Save"
-	save.focus_mode = Control.FOCUS_NONE # WHY: Space (whip) must not press a focused button
+	save.focus_mode = Control.FOCUS_NONE # WHY: driving keys (Space) must not press a focused button
 	save.pressed.connect(save_all)
 	head.add_child(save)
 	_status = Label.new()

@@ -107,7 +107,7 @@ so wave-1 cards can work in parallel. The owner replaces the stub body and keeps
 - **Autoloads:** NetworkManager, SteamManager, VoiceManager, DebugOverlay, GraphicsSettings (`core/`),
   GameEvents, NetClock (`game/common/`), TuningPanel (`game/tuning/`). `core/` never references `game/`.
 - **Input map:** `steer_left/right` (A/D, ←/→, left stick X), `throttle` (W, ↑, RT), `brake` (S, ↓, LT),
-  `whip` (Space, pad A), `action` (F, pad X), `build_rotate_left/right` (Q/E, LB/RB), `build_place` (LMB,
+  `whip` (Shift, pad A), `action` (F, pad X), `build_rotate_left/right` (Q/E, LB/RB), `build_place` (LMB,
   Enter, pad A), `build_cancel` (RMB, Esc, pad B), `toggle_tuning` (F2). F3 = debug overlay (core, hard-coded).
 - **Physics layers** (`common/layers.gd`): 1 world, 2 wall, 3 horses, 4 cart, 5 item_solid, 6 item_trigger,
   7 projectile, 8 pickup.
