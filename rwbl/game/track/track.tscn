@@ -12,6 +12,7 @@ point_count = 11
 
 [node name="Track" type="Node3D" unique_id=195324534]
 script = ExtResource("1")
+pit = true
 
 [node name="Path" type="Path3D" parent="." unique_id=1046869744]
 curve = SubResource("Curve3D_ajufq")

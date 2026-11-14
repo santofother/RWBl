@@ -13,6 +13,11 @@ extends Node3D
 
 ## Drivable width in metres.
 @export var track_width := 14.0 # TUNE
+## True = the road floats over a bottomless pit: no walls, no ground, falling kills (Chariot FALL_KILL_Y).
+## track.tscn sets this; Track.new() in tests keeps a flat ground and walls.
+@export var pit := false
+## Thickness of the floating road slab (m), pit mode only.
+@export var slab_depth := 2.0
 ## Wall height (m) and thickness (m).
 @export var wall_height := 1.6 # TUNE
 @export var wall_thickness := 0.8 # TUNE
@@ -164,22 +169,32 @@ func _compute_bounds() -> void:
 # ---------------------------------------------------------------- generated visuals + collision
 
 func _build_visuals() -> void:
-	var ground := StaticBody3D.new()
-	ground.name = "Ground"
-	ground.collision_layer = Layers.WORLD
-	ground.collision_mask = 0
-	var shape := CollisionShape3D.new()
-	shape.shape = WorldBoundaryShape3D.new()
-	ground.add_child(shape)
-	var sand := MeshInstance3D.new()
-	var plane := PlaneMesh.new()
 	var b := _bounds_local
-	plane.size = Vector2(b.size.x + 120.0, b.size.z + 120.0)
-	sand.mesh = plane
-	sand.position = Vector3(b.position.x + b.size.x * 0.5, 0.0, b.position.z + b.size.z * 0.5)
-	sand.material_override = _mat(Color(0.82, 0.72, 0.52))
-	ground.add_child(sand)
-	add_child(ground)
+	if pit:
+		var abyss := MeshInstance3D.new() # visual only: a dark floor far below, no collision
+		abyss.name = "Abyss"
+		var ap := PlaneMesh.new()
+		ap.size = Vector2(b.size.x + 600.0, b.size.z + 600.0)
+		abyss.mesh = ap
+		abyss.position = Vector3(b.position.x + b.size.x * 0.5, -60.0, b.position.z + b.size.z * 0.5)
+		abyss.material_override = _mat(Color(0.05, 0.04, 0.05))
+		add_child(abyss)
+	else:
+		var ground := StaticBody3D.new()
+		ground.name = "Ground"
+		ground.collision_layer = Layers.WORLD
+		ground.collision_mask = 0
+		var shape := CollisionShape3D.new()
+		shape.shape = WorldBoundaryShape3D.new()
+		ground.add_child(shape)
+		var sand := MeshInstance3D.new()
+		var plane := PlaneMesh.new()
+		plane.size = Vector2(b.size.x + 120.0, b.size.z + 120.0)
+		sand.mesh = plane
+		sand.position = Vector3(b.position.x + b.size.x * 0.5, 0.0, b.position.z + b.size.z * 0.5)
+		sand.material_override = _mat(Color(0.82, 0.72, 0.52))
+		ground.add_child(sand)
+		add_child(ground)
 
 	var steps := maxi(int(length() / MESH_STEP), 8)
 	var h := track_width * 0.5
@@ -187,11 +202,22 @@ func _build_visuals() -> void:
 	road.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var wall := SurfaceTool.new()
 	wall.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var slab := SurfaceTool.new()
+	slab.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for i in steps:
 		var t0 := _local_t(length() * i / steps)
 		var t1 := _local_t(length() * (i + 1) / steps)
 		_quad(road, t0.origin - t0.basis.x * h, t1.origin - t1.basis.x * h, t0.origin + t0.basis.x * h,
 			t1.origin + t1.basis.x * h, Vector3.UP, 0.02)
+		if pit: # slab sides + underside so the road reads as a floating bridge
+			var down := Vector3.DOWN * slab_depth
+			for side: float in [-1.0, 1.0]:
+				var e0: Vector3 = t0.origin + t0.basis.x * side * h
+				var e1: Vector3 = t1.origin + t1.basis.x * side * h
+				_strip(slab, e0 + down, e1 + down, -down, t0.basis.x * side)
+			_quad(slab, t0.origin - t0.basis.x * h + Vector3.DOWN * slab_depth, t1.origin - t1.basis.x * h + Vector3.DOWN * slab_depth,
+				t0.origin + t0.basis.x * h + Vector3.DOWN * slab_depth, t1.origin + t1.basis.x * h + Vector3.DOWN * slab_depth, Vector3.DOWN, 0.0)
+			continue
 		for side: float in [-1.0, 1.0]:
 			var in0: Vector3 = t0.origin + t0.basis.x * side * h
 			var in1: Vector3 = t1.origin + t1.basis.x * side * h
@@ -209,17 +235,24 @@ func _build_visuals() -> void:
 	add_child(road_mi)
 
 	var walls := StaticBody3D.new()
-	walls.name = "Walls"
-	walls.collision_layer = Layers.WALL
+	walls.name = "Walls" if not pit else "Slab"
 	walls.collision_mask = 0
-	var wall_mesh := wall.commit()
+	walls.collision_layer = Layers.WORLD if pit else Layers.WALL
+	var wall_mesh := (slab if pit else wall).commit()
 	var wall_mi := MeshInstance3D.new()
 	wall_mi.mesh = wall_mesh
-	wall_mi.material_override = _mat(Color(0.7, 0.62, 0.55))
+	wall_mi.material_override = _mat(Color(0.45, 0.4, 0.37) if pit else Color(0.7, 0.62, 0.55))
 	walls.add_child(wall_mi)
-	var wall_shape := CollisionShape3D.new()
-	wall_shape.shape = wall_mesh.create_trimesh_shape()
-	walls.add_child(wall_shape)
+	if not pit: # pit mode: the road itself is the only floor (below)
+		var wall_shape := CollisionShape3D.new()
+		wall_shape.shape = wall_mesh.create_trimesh_shape()
+		walls.add_child(wall_shape)
+	else:
+		var floor_shape := CollisionShape3D.new()
+		var tri := road_mi.mesh.create_trimesh_shape()
+		tri.backface_collision = true
+		floor_shape.shape = tri
+		walls.add_child(floor_shape)
 	add_child(walls)
 
 	var line := MeshInstance3D.new()

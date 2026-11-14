@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # C05: race rules. (1) unit test in race/tests/race_test.tscn (countdown, grid, ordered checkpoints, teleport
-# does not count a lap). (2) full standalone match: 3 bots, 2 laps -> 3 [Race] FINISH lines (places 1-3),
+# does not count a lap). (2) full standalone match: 3 bots, 2 laps (test-only RaceTestPilot, because the road has no walls) -> 3 [Race] FINISH lines (places 1-3),
 # race_over, and the race phase ends early (PHASE score long before the 150 s phase time).
 set -u
 source "$(dirname "$0")/lib.sh"
 echo "Logs: $OUT"
 TEST_SCENE=res://game/race/tests/race_test.tscn launch_peer unit
-TEST_SCENE=res://game/match/match.tscn launch_peer match --no-human --bots=3 --phase=race --rounds=1 --laps=2 --phase-time=150 --quit-after=140
+TEST_SCENE=res://game/race/tests/race_full.tscn launch_peer match --quit-after=140
 fail=0
 wait_log unit '\[TEST\] RACE UNIT (PASSED|FAILED)' 40 || fail=1
 wait_log match '\[Game\] PHASE score' 120 || fail=1

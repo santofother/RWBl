@@ -18,6 +18,9 @@ const END_DELAY := 3.0 # TUNE
 const STATE_HZ := 4.0
 ## A checkpoint only counts when crossed with a per-tick move below this (m); bigger jumps are teleports.
 const MAX_STEP := 20.0
+## Seconds a dead chariot waits before this controller puts it back on the track. TODO(C12): Combat's respawn
+## replaces this; remove `_respawn_dead()` then.
+const RESPAWN_DELAY := 2.0 # TUNE
 
 var _m: MatchMode
 var _start_time := 0.0 # NetClock time the phase began
@@ -37,6 +40,7 @@ var _laps_done: Dictionary = {}
 var _dirty: Dictionary = {} # slot -> true if the chariot was hit this lap
 var _hooked: Dictionary = {} # slot -> true once the `hit` signal is connected
 var _sync_accum := 0.0
+var _dead_since: Dictionary = {} # slot -> NetClock time it was seen dead
 
 
 ## Called by MatchMode.setup() on every peer.
@@ -63,6 +67,7 @@ func _on_phase_changed(phase: int, _round: int) -> void:
 	_next_cp.clear()
 	_laps_done.clear()
 	_dirty.clear()
+	_dead_since.clear()
 	var total := _m.track.length()
 	for p in _m.players:
 		var c := _m.chariot_sync.get_chariot(p.slot) as Chariot
@@ -196,6 +201,9 @@ func _track_chariots(now: float) -> void:
 		var c := _m.chariot_sync.get_chariot(slot) as Chariot
 		if c == null:
 			continue
+		if c.dead:
+			_respawn_dead(slot, c, now)
+			continue
 		var last: float = _u[slot]
 		var cur := _nearest_unwrapped(_wrapped(_m.track.progress_at(c.global_position), total), last, total)
 		_u[slot] = cur
@@ -227,6 +235,21 @@ func _track_chariots(now: float) -> void:
 			_next_target[slot] = _target(slot, _next_cp[slot])
 		st["progress"] = maxf(0.0, cur)
 		st["lap"] = mini(int(_laps_done[slot]) + 1, _laps)
+
+
+## Stand-in for C12: a chariot that fell into the pit (or died) comes back at the last checkpoint it passed.
+func _respawn_dead(slot: int, c: Chariot, now: float) -> void:
+	if not _dead_since.has(slot):
+		_dead_since[slot] = now
+	if now - float(_dead_since[slot]) < RESPAWN_DELAY:
+		return
+	_dead_since.erase(slot)
+	var cp: int = int(_next_cp[slot]) - 1
+	var xf := _m.track.respawn_transform(_m.track.checkpoint_progress(cp))
+	c.respawn(xf)
+	var total := _m.track.length()
+	_u[slot] = _nearest_unwrapped(_wrapped(_m.track.progress_at(c.global_position), total), float(_u[slot]), total)
+	print("[Race] RESPAWN %d at checkpoint %d" % [slot, cp])
 
 
 func _update_places() -> void:

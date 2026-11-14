@@ -36,6 +36,18 @@ func _ready() -> void:
 	_check(int(m.race._next_cp[0]) == 1, "teleported chariot is still waiting for checkpoint 1 (next=%d)" % int(m.race._next_cp[0]))
 	_check(int(m.race._next_cp[1]) >= 2, "bot driving normally passed checkpoint 1 (next=%d)" % int(m.race._next_cp[1]))
 	_check(m.race.place_of(1) == 1 and m.race.place_of(0) == 2, "places follow progress (%d, %d)" % [m.race.place_of(0), m.race.place_of(1)])
+	# pit: no floor beside the road, falling kills, the race puts the chariot back
+	var off := t.point_at(100.0) + t.transform_at(100.0).basis.x * (t.track_width * 0.5 + 6.0)
+	var q := PhysicsRayQueryParameters3D.create(off + Vector3.UP * 5.0, off + Vector3.DOWN * 50.0, Layers.WORLD | Layers.WALL)
+	_check(get_viewport().world_3d.direct_space_state.intersect_ray(q).is_empty(), "no floor or wall beside the road (pit)")
+	var on := t.point_at(100.0)
+	q = PhysicsRayQueryParameters3D.create(on + Vector3.UP * 5.0, on + Vector3.DOWN * 5.0, Layers.WORLD)
+	_check(not get_viewport().world_3d.direct_space_state.intersect_ray(q).is_empty(), "road is solid")
+	c1.global_position = Vector3(off.x, 3.0, off.z)
+	await get_tree().create_timer(3.6).timeout # ~2.6 s to fall 30 m, respawn 2 s after that
+	_check(c1.dead, "chariot over the pit fell and died")
+	await get_tree().create_timer(2.5).timeout
+	_check(not c1.dead and c1.global_position.y > -1.0 and t.is_on_track(c1.global_position), "chariot respawned on the road")
 	print("[TEST] RACE UNIT %s" % ("PASSED" if _fails == 0 else "FAILED (%d)" % _fails))
 	get_tree().quit(0 if _fails == 0 else 1)
 
