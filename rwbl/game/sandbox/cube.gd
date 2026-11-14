@@ -1,39 +1,40 @@
 extends Node3D
-## One player's cube in the C01 network sandbox. Owner: C01. Temporary: C02/C07 replace it with the
-## host-authoritative chariot (clients send ChariotInput, host simulates).
-## NET: owner client, authoritative over its own position (LastMage pattern). The MultiplayerSynchronizer
-## child replicates `position` from the owning peer to everyone else.
-## Public API: `peer_id`, `display_name` (set by the spawner before the node enters the tree).
+## One player's cube in the network sandbox (milestone N1). Owner: C02 (was C01).
+## Since C02 it follows the real authority model: the owner sends ChariotInput, the host moves the cube
+## (step), clients show host snapshots (apply_snapshot). Same "drivable" interface as Chariot, driven by
+## ChariotSync. NET: host simulates; every peer renders.
+## Public API: `peer_id`, `slot`, `display_name` (set by the spawner), step(), get_snapshot(), apply_snapshot().
 
 # TUNE: sandbox only.
 const SPEED := 6.0
 const HALF_EXTENT := 19.0 ## keep the cube on the 40 x 40 plane
 
-## Peer that owns (drives) this cube. Also the node name.
+## Peer that drives this cube. Also the node name.
 var peer_id := 1
+## ChariotSync slot.
+var slot := 0
 ## Player name shown above the cube and printed by the autotest.
 var display_name := "Player"
-
-
-func _enter_tree() -> void:
-	# NET: must run before the synchronizer is ready so it picks up the right authority.
-	set_multiplayer_authority(peer_id)
 
 
 func _ready() -> void:
 	($Label as Label3D).text = display_name
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color.from_hsv(fmod(float(peer_id % 97) * 0.173, 1.0), 0.7, 0.95)
+	mat.albedo_color = PlayerInfo.color_for_slot(slot)
 	($Mesh as MeshInstance3D).material_override = mat
 
 
-func _physics_process(delta: float) -> void:
-	if not is_multiplayer_authority():
-		return
-	if NetworkManager.test_target != null: # headless test hook: park at a known spot
-		var t: Vector2 = NetworkManager.test_target
-		position = Vector3(t.x, position.y, t.y)
-		return
-	var dir := Input.get_vector(&"move_left", &"move_right", &"move_forward", &"move_back")
-	position.x = clampf(position.x + dir.x * SPEED * delta, -HALF_EXTENT, HALF_EXTENT)
-	position.z = clampf(position.z + dir.y * SPEED * delta, -HALF_EXTENT, HALF_EXTENT)
+## Host: move by input. steer = x axis, throttle/brake = -z/+z.
+func step(input: ChariotInput, delta: float) -> void:
+	position.x = clampf(position.x + input.steer * SPEED * delta, -HALF_EXTENT, HALF_EXTENT)
+	position.z = clampf(position.z + (input.brake - input.throttle) * SPEED * delta, -HALF_EXTENT, HALF_EXTENT)
+
+
+## Host: snapshot in the ChariotSnapshot layout (position only).
+func get_snapshot() -> PackedFloat32Array:
+	return ChariotSnapshot.make(position, Quaternion.IDENTITY, Vector3.ZERO, 0.0, 0.0, 0, 1.0, 0)
+
+
+## Clients: show a host snapshot.
+func apply_snapshot(s: PackedFloat32Array) -> void:
+	position = ChariotSnapshot.pos(s)

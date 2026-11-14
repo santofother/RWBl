@@ -7,3 +7,5 @@ rwbl/addons/godotsteam/androidarm64/
 rwbl/addons/godotsteam/linux32/
 rwbl/addons/godotsteam/linuxarm64/
 rwbl/addons/godotsteam/win32/
+# Claude Code worktrees (one per card session)
+.claude/worktrees/

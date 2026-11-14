@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="ItemDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://game/common/item_def.gd" id="1"]
+[ext_resource type="PackedScene" path="res://game/items/placeholder_item.tscn" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"oil_slick"
+display_name = "Oil Slick"
+description = "Grip near zero. Flammable."
+rarity = 0
+category = 0
+tags = Array[StringName]([&"flammable", &"slippery"])
+footprint = Vector2(4, 5)
+blocks_path = false
+scene = ExtResource("2")

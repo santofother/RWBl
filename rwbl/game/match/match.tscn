@@ -1,0 +1,54 @@
+[gd_scene load_steps=14 format=3]
+
+[ext_resource type="Script" path="res://game/match/match.gd" id="1"]
+[ext_resource type="PackedScene" path="res://game/track/track.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://game/net/chariot_sync.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://game/race/race.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://game/draft/draft.tscn" id="5"]
+[ext_resource type="PackedScene" path="res://game/build/build.tscn" id="6"]
+[ext_resource type="PackedScene" path="res://game/scoring/scoring.tscn" id="7"]
+[ext_resource type="PackedScene" path="res://game/combat/combat.tscn" id="8"]
+[ext_resource type="PackedScene" path="res://game/bots/bots.tscn" id="9"]
+[ext_resource type="PackedScene" path="res://game/camera/cameras.tscn" id="10"]
+[ext_resource type="PackedScene" path="res://game/hud/hud.tscn" id="11"]
+
+[sub_resource type="Environment" id="env"]
+background_mode = 1
+background_color = Color(0.55, 0.72, 0.9, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.6, 0.6, 0.65, 1)
+
+[node name="Match" type="Node"]
+script = ExtResource("1")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.5, 0.866025, 0, -0.866025, 0.5, 0, 30, 0)
+shadow_enabled = true
+
+[node name="Track" parent="." instance=ExtResource("2")]
+
+
+[node name="Items" type="Node3D" parent="."]
+
+[node name="Chariots" type="Node3D" parent="."]
+
+[node name="ChariotSync" parent="." instance=ExtResource("3")]
+
+[node name="Race" parent="." instance=ExtResource("4")]
+
+[node name="Draft" parent="." instance=ExtResource("5")]
+
+[node name="Build" parent="." instance=ExtResource("6")]
+
+[node name="Scoring" parent="." instance=ExtResource("7")]
+
+[node name="Combat" parent="." instance=ExtResource("8")]
+
+[node name="Bots" parent="." instance=ExtResource("9")]
+
+[node name="Cameras" parent="." instance=ExtResource("10")]
+
+[node name="Hud" parent="." instance=ExtResource("11")]

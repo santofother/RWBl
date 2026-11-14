@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="TagTable" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://game/common/tag_table.gd" id="1"]
+[ext_resource type="Script" path="res://game/common/tag_rule.gd" id="2"]
+
+[sub_resource type="Resource" id="ignite"]
+script = ExtResource("2")
+tag_a = &"flammable"
+tag_b = &"hot"
+effect = &"ignite"
+params = {"duration": 6.0}
+
+[sub_resource type="Resource" id="slide"]
+script = ExtResource("2")
+tag_a = &"heavy"
+tag_b = &"slippery"
+effect = &"slide_far"
+params = {"friction_mult": 0.2}
+
+[resource]
+script = ExtResource("1")
+rules = Array[ExtResource("2")]([SubResource("ignite"), SubResource("slide")])

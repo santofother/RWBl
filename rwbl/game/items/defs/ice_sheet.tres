@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="ItemDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://game/common/item_def.gd" id="1"]
+[ext_resource type="PackedScene" path="res://game/items/placeholder_item.tscn" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"ice_sheet"
+display_name = "Ice Sheet"
+description = "No steering while on it."
+rarity = 1
+category = 0
+tags = Array[StringName]([&"slippery"])
+footprint = Vector2(5, 6)
+blocks_path = false
+scene = ExtResource("2")

@@ -114,7 +114,7 @@ swap freely if one tool hits its limit.
 |---|---|---|---|---|---|---|
 | C07 | Host-authoritative chariot netcode: inputs up, snapshots down, interpolation, light own-chariot prediction (N4) | Claude | T1 | 8 | C03, C04 | Feels fine at 100 ms simulated lag (headless lag test + your check) |
 | C08 | Build phase: top-down camera, grid/snap, ghost, rotate, placement RPC, host validation incl. path check (N5) | Codex | T2 | 5.5, 7, 8 | C05 | Bad placements rejected in a headless test |
-| C09 | Match flow: Draft → Build → Race → Score loop, rounds, Grand Circus, catch-up card dealing | Codex | T2 | 3, 5.5 | C03 | Full 6-round match runs headless with bots |
+| C09 | Match flow: Draft → Build → Race → Score loop, rounds, Grand Circus, catch-up card dealing | Codex | T2 | 3, 5.5 | C05, C06 | Full 6-round match runs headless with bots |
 | C10 | Item framework + tag interaction table + first 8 items (oil, mud, ice, speed pad, ramp, column, swinging axe, pit) | Either | T2 | 5.1, 5.2 | C04, C05 | Each item affects a bot chariot in a test |
 
 ### Wave 3: full loop (all parallel)

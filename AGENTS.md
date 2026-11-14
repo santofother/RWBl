@@ -93,6 +93,8 @@ Godot binary: `$GODOT`, default `/Users/santofothergill/Downloads/Godot.app/Cont
 - CLI args (after `--`): `--host`, `--join=IP`, `--port=N`, `--name=X`, `--no-steam`, `--bots=N`,
   `--autotest=SEC`, `--quit-after=SEC`, `--lag-ms=N`, `--test-target=x,z`, `--voice` (voice is off by default)
   (cards add more; list them here when you do).
+- Standalone match (run `res://game/match/match.tscn` directly; tests and F6): `--bots=N`, `--no-human`,
+  `--phase=draft|build|race|score`, `--rounds=N`, `--laps=N`, `--phase-time=SEC` (see `docs/ARCHITECTURE.md` §1).
 
 ## Conventions
 - **Authority (differs from LastMage!):** the host simulates chariots, items, combat and scoring. Clients send

@@ -1,9 +1,12 @@
 extends Node3D
-## C01 network sandbox (milestone N1): main menu, flat plane, one WASD cube per player. Owner: C01.
-## Temporary main scene; C02 decides what replaces it. Menu is built in code to keep the .tscn tiny.
+## Network sandbox (milestone N1): main menu, flat plane, one WASD cube per player. Owner: C02 (was C01).
+## Kept as the N1 regression scene for net_test after C03 makes lobby/main.tscn the main scene.
+## Menu is built in code to keep the .tscn tiny.
 ## NET: runs on every peer. Spawning/despawning cubes is server only (MultiplayerSpawner replicates).
+## Movement: input up / snapshot down through ChariotSync (host-authoritative, AGENTS §Conventions).
 ## Public API: none. CLI (after `--`): `--host`, `--join=IP`, `--port=N`, `--name=X`, `--no-steam`,
-##   `--test-target=x,z`, `--autotest=SEC` (prints `[TEST] PEERS n` and `[TEST] POS <name> x z`),
+##   `--test-target=x,z` (local input steers the cube to x,z), `--autotest=SEC` (prints `[TEST] PEERS n`
+##   and `[TEST] POS <name> x z`),
 ##   `--quit-after=SEC`.
 
 const CUBE_SCENE := preload("res://game/sandbox/cube.tscn")
@@ -13,6 +16,7 @@ const SPAWNS: Array[Vector3] = [Vector3(0, 0.5, 0), Vector3(3, 0.5, 0), Vector3(
 
 @onready var players: Node3D = $Players
 @onready var spawner: MultiplayerSpawner = $PlayerSpawner
+@onready var chariot_sync: ChariotSync = $ChariotSync
 
 var _menu: PanelContainer
 var _in_game: HBoxContainer
@@ -33,6 +37,8 @@ func _ready() -> void:
 	SteamManager.lobby_list_updated.connect(_on_lobby_list)
 	_build_ui()
 	_set_status("Steam: " + SteamManager.init_message)
+	if NetworkManager.test_target != null:
+		chariot_sync.local_input_source = _seek_input
 	_run_cli()
 
 
@@ -61,8 +67,13 @@ func _run_cli() -> void:
 func _on_player_registered(id: int, pname: String) -> void: # NET: server only
 	if players.has_node(str(id)):
 		return
-	var pos: Vector3 = SPAWNS[players.get_child_count() % SPAWNS.size()]
-	spawner.spawn({"id": id, "name": pname, "pos": pos})
+	var used: Array[int] = []
+	for c in players.get_children():
+		used.append(c.slot)
+	var slot := 0
+	while used.has(slot):
+		slot += 1
+	spawner.spawn({"id": id, "name": pname, "pos": SPAWNS[slot % SPAWNS.size()], "slot": slot})
 	print("[Game] Spawned cube for ", pname, " (", id, ")")
 
 
@@ -72,7 +83,24 @@ func _spawn_cube(data: Dictionary) -> Node:
 	c.peer_id = data["id"]
 	c.display_name = data["name"]
 	c.position = data["pos"]
+	c.slot = data["slot"]
+	chariot_sync.add_chariot(c.slot, c, c.peer_id)
+	c.tree_exiting.connect(chariot_sync.remove_chariot.bind(c.slot))
 	return c
+
+
+## Test hook input: steer the local cube toward NetworkManager.test_target (x, z).
+func _seek_input(slot: int) -> ChariotInput:
+	var inp := ChariotInput.new()
+	var c := chariot_sync.get_chariot(slot)
+	if c:
+		var t: Vector2 = NetworkManager.test_target
+		var dx := t.x - c.position.x
+		var dz := t.y - c.position.z
+		inp.steer = clampf(dx, -1.0, 1.0)
+		inp.throttle = clampf(-dz, 0.0, 1.0)
+		inp.brake = clampf(dz, 0.0, 1.0)
+	return inp
 
 
 func _on_peer_left(id: int) -> void:
