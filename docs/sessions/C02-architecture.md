@@ -2,9 +2,9 @@
 Agent: **Claude only** (head engineer) · Tier: **T1** · Claude: Opus 5.5, high · Wave 0 · Branch: `c02-architecture`
 Depends on: C01 · Run in a worktree once the GitHub repo exists (otherwise main folder, on the branch)
 
-Owns: `docs/ARCHITECTURE.md`, `docs/sessions/`, `docs/STATUS.md`, `custom-chariot/game/**` (stubs only),
-`custom-chariot/project.godot` (autoloads, input map, physics layers), `tools/tests/contract_test.sh`
-Read: `DESIGN.md` (all, it's the input) · `docs/PLAN.md` §5 · `docs/handoffs/C01.md` · `custom-chariot/core/*.gd` (API only)
+Owns: `docs/ARCHITECTURE.md`, `docs/sessions/`, `docs/STATUS.md`, `rwbl/game/**` (stubs only),
+`rwbl/project.godot` (autoloads, input map, physics layers), `tools/tests/contract_test.sh`
+Read: `DESIGN.md` (all, it's the input) · `docs/PLAN.md` §5 · `docs/handoffs/C01.md` · `rwbl/core/*.gd` (API only)
 
 ## Goal
 Every later card can be built in parallel without talking to the others, because the folders, ownership and

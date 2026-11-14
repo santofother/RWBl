@@ -1,4 +1,4 @@
-# Custom Chariot: Development Plan
+# Rome Wasn't Built in a Lap (RWBL): Development Plan
 
 How the game gets built with two AI coders (Claude Code and Codex) while spending as few tokens as possible
 and keeping the game true to `DESIGN.md`.

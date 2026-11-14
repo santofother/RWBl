@@ -1,4 +1,4 @@
-# Custom Chariot — rules for every coding agent
+# Rome Wasn't Built in a Lap (RWBL) — rules for every coding agent
 
 Read this whole file at the start of every session. Claude Code and Codex both read it, so it's the single
 source of truth. `CLAUDE.md` only adds Claude-specific notes.
@@ -72,7 +72,7 @@ across it. LAN + Steam. Design: `DESIGN.md` (read only the sections your card na
 
 ## Layout
 - `DESIGN.md`: game design (user owns).
-- `custom-chariot/`: Godot 4.7 project (Forward+, Jolt Physics)
+- `rwbl/`: Godot 4.7 project (Forward+, Jolt Physics)
   - `core/`: reusable party layer copied from LastMage (`network_manager.gd`, `steam_manager.gd`,
     `debug_overlay.gd`, `graphics_settings.gd`, `voice_manager.gd` off by default). **`core/` never depends on
     `game/`.** It will become the shared `party_core` addon in wave 6, so keep it game-agnostic.
@@ -86,10 +86,10 @@ across it. LAN + Steam. Design: `DESIGN.md` (read only the sections your card na
 
 ## Commands
 Godot binary: `$GODOT`, default `/Users/santofothergill/Downloads/Godot.app/Contents/MacOS/Godot`.
-- Import (new worktree, and after adding files): `$GODOT --headless --path custom-chariot --import`
+- Import (new worktree, and after adding files): `$GODOT --headless --path rwbl --import`
 - All tests: `tools/run_tests.sh`
-- Export: `$GODOT --headless --path custom-chariot --export-debug "Windows Desktop" ../build/windows/CustomChariot.exe`
-  (and `"macOS" ../build/macos/CustomChariot.app`). macOS preset keeps `codesign/codesign=3` (see LastMage notes).
+- Export: `$GODOT --headless --path rwbl --export-debug "Windows Desktop" ../build/windows/RWBL.exe`
+  (and `"macOS" ../build/macos/RWBL.app`). macOS preset keeps `codesign/codesign=3` (see LastMage notes).
 - CLI args (after `--`): `--host`, `--join=IP`, `--port=N`, `--name=X`, `--no-steam`, `--bots=N`,
   `--autotest=SEC`, `--quit-after=SEC`, `--lag-ms=N`, `--test-target=x,z`, `--voice` (voice is off by default)
   (cards add more; list them here when you do).

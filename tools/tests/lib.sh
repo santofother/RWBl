@@ -4,7 +4,7 @@
 # assert_log NAME REGEX, assert_clean_logs. Logs remain in $OUT on success/failure.
 GODOT="${GODOT:-/Users/santofothergill/Downloads/Godot.app/Contents/MacOS/Godot}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-OUT="${OUT:-$(mktemp -d -t chariot_test)}"
+OUT="${OUT:-$(mktemp -d -t rwbl_test)}"
 PORT="${PORT:-$(( 20000 + RANDOM % 20000 ))}"
 pids=()
 logs=()
@@ -13,7 +13,7 @@ cleanup_peers() { for pid in ${pids[@]+"${pids[@]}"}; do kill "$pid" 2>/dev/null
 trap cleanup_peers EXIT
 launch_peer() {
     local name="$1"; shift
-    "$GODOT" --headless --path "$ROOT/custom-chariot" "${TEST_SCENE:-res://game/sandbox/sandbox.tscn}" -- --no-steam "--port=$PORT" "$@" >"$OUT/$name.log" 2>&1 &
+    "$GODOT" --headless --path "$ROOT/rwbl" "${TEST_SCENE:-res://game/sandbox/sandbox.tscn}" -- --no-steam "--port=$PORT" "$@" >"$OUT/$name.log" 2>&1 &
     pids+=("$!"); logs+=("$OUT/$name.log")
 }
 wait_log() {
@@ -42,5 +42,6 @@ assert_clean_logs() {
             echo "Disconnected before passing ($log)"; return 1
         fi
     done
-    if grep -En 'SCRIPT ERROR|Parse Error|ERROR:|Failed to load|\[TEST\] FAIL' "${logs[@]}"; then return 1; fi
+    # WHY: ignore the harmless ENet shutdown race "max channels: 0" (see net_test.sh).
+    if grep -En 'SCRIPT ERROR|Parse Error|ERROR:|Failed to load|\[TEST\] FAIL' "${logs[@]}" | grep -v "max channels: 0"; then return 1; fi
 }

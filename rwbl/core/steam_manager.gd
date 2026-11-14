@@ -9,7 +9,7 @@ signal lobby_list_updated(lobbies: Array) ## [{id, name, members}]
 signal status_changed(text: String)
 
 const APP_ID := 480 ## Spacewar test app. Replace with your own app ID later.
-const GAME_KEY := "customchariot_dev" ## lobby filter so we only see our lobbies on app 480
+const GAME_KEY := "rwbl_dev" ## lobby filter so we only see our lobbies on app 480
 
 var available := false
 var init_message := "Not initialized"

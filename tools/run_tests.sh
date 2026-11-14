@@ -3,7 +3,7 @@
 # Usage: tools/run_tests.sh [--quick] [name-filter]
 set -u
 DIR="$(cd "$(dirname "$0")/tests" && pwd)"
-LOGDIR="$(mktemp -d -t chariot_tests)"
+LOGDIR="$(mktemp -d -t rwbl_tests)"
 quick=0; filter=""
 for arg in "$@"; do
     case "$arg" in

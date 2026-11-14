@@ -9,7 +9,7 @@ DONE (on main, date) · BLOCKED (reason)
 ## Board
 | Card | Title | Wave | Agent · Tier | Depends on | Status | Branch / note |
 |---|---|---|---|---|---|---|
-| C01 | Project + LastMage net core + cube sync (N1) | 0 | Claude only · T2 | — | DONE 2026-11-13 | main (no remote yet) |
+| C01 | Project + LastMage net core + cube sync (N1) | 0 | Claude only · T2 | — | DONE 2026-11-13 | main |
 | C02 | Architecture, contracts, stubs, cards C03–C14 | 0 | Claude only · T1 | C01 | READY | |
 | C03 | Lobby: LAN discovery, Steam, ready-up (N2, N3) | 1 | Either (Codex) · T2 | C02 | TODO | |
 | C04 | Chariot controller + F2 tuning panel | 1 | Either (Claude) · T1 | C02 | TODO | |

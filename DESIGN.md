@@ -1,6 +1,6 @@
-# Custom Chariot: Design Doc (v0.1)
+# Rome Wasn't Built in a Lap (RWBL): Design Doc (v0.1)
 
-Working title. A chaotic party racer where players take turns building the track, then race chariots across it.
+Title: *Rome Wasn't Built in a Lap* (short: RWBL). A chaotic party racer where players take turns building the track, then race chariots across it.
 
 ## 1. Pitch
 

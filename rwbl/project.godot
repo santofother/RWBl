@@ -1,11 +1,16 @@
 ; Engine configuration file.
-; Edited as text by agents (see AGENTS.md); the editor may rewrite it.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
 
 config_version=5
 
 [application]
 
-config/name="Custom Chariot"
+config/name="Rome Wasn't Built in a Lap"
 run/main_scene="res://game/sandbox/sandbox.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
@@ -31,7 +36,7 @@ window/stretch/aspect="expand"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/chariot_export/plugin.cfg")
+enabled=PackedStringArray("res://addons/rwbl_export/plugin.cfg")
 
 [input]
 

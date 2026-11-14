@@ -1,4 +1,4 @@
-# Exporting and testing Custom Chariot (Steam + LAN)
+# Exporting and testing RWBL (Steam + LAN)
 
 This guide covers how to build the game for Windows and Mac, move it to your other PC, and run a
 two-machine test of connections. You don't need to be a Godot expert to follow it.
@@ -14,7 +14,7 @@ LastMage but **off by default** (start with `-- --voice` to turn it on).
 Godot needs "export templates" (the prebuilt game engine for each platform) before it can export.
 You only do this once per Godot version.
 
-1. Open Godot (`~/Downloads/Godot.app`) and open the project in `custom-chariot/`.
+1. Open Godot (`~/Downloads/Godot.app`) and open the project in `rwbl/`.
 2. Go to **Editor → Manage Export Templates…**
 3. Click **Download and Install**. The download is about 1 GB. Wait until it shows **4.7.2.stable — Installed**.
    - If the download fails, get the `.tpz` file for **4.7.2 stable** from
@@ -34,20 +34,20 @@ Builds go to `build/` at the top of the repo. That folder is ignored by git.
 ### From the Godot editor
 1. **Project → Export…**
 2. Select **Windows Desktop**, then click **Export Project…**. Keep the suggested path
-   (`build/windows/CustomChariot.exe`).
-   - Leave **Export With Debug** ticked while testing. You then also get `CustomChariot.console.exe`,
+   (`build/windows/RWBL.exe`).
+   - Leave **Export With Debug** ticked while testing. You then also get `RWBL.console.exe`,
      which opens a window showing the logs. That's very useful when something goes wrong.
-3. Select **macOS**, then **Export Project…** → `build/macos/CustomChariot.app`.
+3. Select **macOS**, then **Export Project…** → `build/macos/RWBL.app`.
 
 ### From the terminal (same result)
 ```bash
-cd ~/PersonalProjects/CustomChariot/custom-chariot
+cd ~/PersonalProjects/CustomChariot/rwbl
 ```
 ```bash
-~/Downloads/Godot.app/Contents/MacOS/Godot --headless --path . --export-debug "Windows Desktop" ../build/windows/CustomChariot.exe
+~/Downloads/Godot.app/Contents/MacOS/Godot --headless --path . --export-debug "Windows Desktop" ../build/windows/RWBL.exe
 ```
 ```bash
-~/Downloads/Godot.app/Contents/MacOS/Godot --headless --path . --export-debug "macOS" ../build/macos/CustomChariot.app
+~/Downloads/Godot.app/Contents/MacOS/Godot --headless --path . --export-debug "macOS" ../build/macos/RWBL.app
 ```
 
 ### What must be next to the game
@@ -56,15 +56,15 @@ cd ~/PersonalProjects/CustomChariot/custom-chariot
 
 | File | What it is |
 |---|---|
-| `CustomChariot.exe` | the game |
-| `CustomChariot.console.exe` | same game, with a log window (debug exports only) |
-| `CustomChariot.pck` | the game's data |
+| `RWBL.exe` | the game |
+| `RWBL.console.exe` | same game, with a log window (debug exports only) |
+| `RWBL.pck` | the game's data |
 | `libgodotsteam.windows.template_*.x86_64.dll` | GodotSteam |
 | `steam_api64.dll` | Valve's Steam library |
 | `steam_appid.txt` | contains `480`. Tells Steam which app this is. Copied automatically by our export plugin |
 
-**Mac** (`build/macos/CustomChariot.app`): everything is inside the `.app`. Debug exports also create
-`CustomChariot.command`; double-click it to run the game with a Terminal window showing the logs. The Steam libraries are in
+**Mac** (`build/macos/RWBL.app`): everything is inside the `.app`. Debug exports also create
+`RWBL.command`; double-click it to run the game with a Terminal window showing the logs. The Steam libraries are in
 `Contents/Frameworks/`. The Mac build doesn't need `steam_appid.txt` because the game sets
 app ID 480 in code. A copy is still placed next to the `.app`, and it does no harm.
 
@@ -78,7 +78,7 @@ menu then says "Steam not available".
 1. In Finder, right-click `build/windows` → **Compress "windows"**.
 2. Copy `windows.zip` to the PC using a USB stick, Google Drive/Dropbox/OneDrive, or a shared network folder.
 3. On the PC: right-click the zip → **Extract All…** Don't run it from inside the zip.
-4. Double-click `CustomChariot.console.exe` (or `CustomChariot.exe`).
+4. Double-click `RWBL.console.exe` (or `RWBL.exe`).
    - If you see **"Windows protected your PC"**: click **More info → Run anyway**. This happens because the
      build isn't code-signed.
    - If Windows Firewall asks about network access, allow **Private networks**. LAN mode needs this.
@@ -97,8 +97,8 @@ killed instantly on launch, so don't switch it back.
 - **A build that was downloaded or AirDropped** (for example, to a friend's Mac) gets blocked the first time:
   1. Double-click it. You'll get a warning. Click **Done/Cancel**.
   2. Open **System Settings → Privacy & Security**, scroll down, and click **Open Anyway** next to
-     "CustomChariot was blocked". Confirm with your password.
-  3. Terminal alternative: `xattr -dr com.apple.quarantine /path/to/CustomChariot.app`
+     "RWBL was blocked". Confirm with your password.
+  3. Terminal alternative: `xattr -dr com.apple.quarantine /path/to/RWBL.app`
 - **Microphone:** voice is off by default, so the game normally never asks. If you start it with `--voice`,
   macOS asks for the microphone once: click **Allow**.
 
@@ -148,11 +148,11 @@ method works without it.
 1. **Open Steam on both machines** and wait until it finishes logging in. You should see your friends list or
    library, not a login screen.
 2. **Start the game:**
-   - Windows: open the folder you extracted (the one with `CustomChariot.exe`, `steam_api64.dll`,
-     `steam_appid.txt` …). Double-click **`CustomChariot.console.exe`**. A black log window opens next to the
+   - Windows: open the folder you extracted (the one with `RWBL.exe`, `steam_api64.dll`,
+     `steam_appid.txt` …). Double-click **`RWBL.console.exe`**. A black log window opens next to the
      game, which helps if something goes wrong. If Windows shows "Windows protected your PC", click
      **More info → Run anyway**.
-   - Mac: double-click `build/macos/CustomChariot.app`, or `CustomChariot.command` for a log window.
+   - Mac: double-click `build/macos/RWBL.app`, or `RWBL.command` for a log window.
 3. **Check the menu** on both machines. The status line at the bottom should say
    **"Steam: Logged in as <your Steam name>"**.
    If it says "Steam not available …", close the game, make sure Steam is fully logged in, and start the game
@@ -225,13 +225,13 @@ It prints `NET TEST PASSED` or tells you which check failed.
 | Lobby list is empty | The host must be in a lobby first (Steam Host). Click Steam Join again after a few seconds. Both machines must run the same build |
 | Invite accepted but Spacewar opened | The game wasn't running on the joiner. Start our game first, then accept, or use the lobby list |
 | LAN join times out | Wrong IP, different networks, or firewall. Allow the game on **Private networks** in Windows Firewall. Try the host's IP from `ipconfig` |
-| Mac says the app "is damaged and can't be opened" | It was quarantined in transit. Run `xattr -dr com.apple.quarantine CustomChariot.app` |
+| Mac says the app "is damaged and can't be opened" | It was quarantined in transit. Run `xattr -dr com.apple.quarantine RWBL.app` |
 | Export fails with "No export template found" | Do section 1 |
 | Mac app quits instantly with no window (Terminal shows exit 137 / "Killed") | Its code signature was rejected. Check the macOS preset still has **Codesign → Xcode codesign** with identity `-`, then re-export |
 | Windows "Windows protected your PC" | More info → Run anyway (unsigned build) |
 
-Logs: on Windows run `CustomChariot.console.exe`. On Mac run
-`build/macos/CustomChariot.app/Contents/MacOS/CustomChariot` from Terminal. Lines start with `[Net]`,
+Logs: on Windows run `RWBL.console.exe`. On Mac run
+`build/macos/RWBL.app/Contents/MacOS/RWBL` from Terminal. Lines start with `[Net]`,
 `[Steam]`, or `[Game]`.
 
 ---
@@ -239,9 +239,9 @@ Logs: on Windows run `CustomChariot.console.exe`. On Mac run
 ## 9. What changes when you pay for your own Steam app ID
 
 1. Pay the Steam Direct fee and create the app in Steamworks. You get an app ID (e.g. `1234560`).
-2. In `custom-chariot/core/steam_manager.gd`, change `APP_ID := 480` to your ID. You can also change
+2. In `rwbl/core/steam_manager.gd`, change `APP_ID := 480` to your ID. You can also change
    `GAME_KEY`, which matters less once you're no longer sharing app 480 with everyone else.
-3. Change `custom-chariot/steam_appid.txt` to your ID. Keep it for local testing, but **don't ship it** in builds
+3. Change `rwbl/steam_appid.txt` to your ID. Keep it for local testing, but **don't ship it** in builds
    uploaded to Steam. Steam provides the ID when it launches the game.
 4. Upload builds through Steamworks (SteamPipe) and install them via Steam on each test machine. Testers need a
    key or to be added to the app's beta.

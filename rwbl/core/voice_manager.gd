@@ -1,7 +1,7 @@
 extends Node
 ## Proximity voice chat (autoload `VoiceManager`). Owner: C01 (copied from LastMage core, S12 v2).
 ## NET: runs on every peer; each peer plays what it receives.
-## OFF BY DEFAULT in Custom Chariot: `enable_raw_voice` is false and the mic is never opened until
+## OFF BY DEFAULT in RWBL: `enable_raw_voice` is false and the mic is never opened until
 ## `set_enabled(true)` or the `--voice` CLI arg (`--test-voice` also enables it for headless tests).
 ## Both Steam and ENet modes capture 16 kHz mono from Godot's mic (direct input API) and send it as
 ## IMA ADPCM (4 bit, ~66 kbit/s, see core/voice/voice_adpcm.gd). RAW 16-bit PCM (256 kbit/s) is the fallback:
@@ -57,7 +57,7 @@ var full_volume_distance := 8.0
 var silent_distance := 45.0
 var push_to_talk := true
 var ptt_key: Key = KEY_V
-var enable_raw_voice := false ## WHY: Custom Chariot ships with voice off; see set_enabled()
+var enable_raw_voice := false ## WHY: RWBL ships with voice off; see set_enabled()
 var loopback := false ## play own mic locally (debug)
 var use_compression := true ## false = RAW 16-bit PCM
 var voice_rules: Dictionary = DEFAULT_RULES.duplicate(true) ## see DEFAULT_RULES

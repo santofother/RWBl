@@ -13,8 +13,8 @@ move, built from LastMage's proven net core instead of from scratch.
 
 ## Steps
 - `git init` in `CustomChariot`, `.gitignore` adapted from LastMage (`build/`, `.godot/`, unused GodotSteam platforms).
-- Create `custom-chariot/project.godot`: Godot 4.7, Forward+, Jolt Physics, app name "Custom Chariot".
-- Copy into `custom-chariot/core/`: `network_manager.gd`, `steam_manager.gd`, `debug_overlay.gd`,
+- Create `rwbl/project.godot`: Godot 4.7, Forward+, Jolt Physics, app name "RWBL".
+- Copy into `rwbl/core/`: `network_manager.gd`, `steam_manager.gd`, `debug_overlay.gd`,
   `graphics_settings.gd`, `voice_manager.gd`. Strip anything that references LastMage `game/` code
   (`core/` must not depend on `game/`). Voice stays registered but **disabled by default** (setting off).
   Set `MAX_PLAYERS` to 5 and a different `DEFAULT_PORT` from LastMage so both games can run at once.

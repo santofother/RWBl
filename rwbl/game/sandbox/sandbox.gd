@@ -104,7 +104,7 @@ func _build_ui() -> void:
 	layer.add_child(_menu)
 	var box := VBoxContainer.new()
 	_menu.add_child(box)
-	_label(box, "Custom Chariot — network sandbox")
+	_label(box, "Rome Wasn't Built in a Lap — network sandbox")
 	_name_edit = LineEdit.new()
 	_name_edit.placeholder_text = "Your name"
 	_name_edit.text = SteamManager.persona_name if SteamManager.available else NetworkManager.local_name

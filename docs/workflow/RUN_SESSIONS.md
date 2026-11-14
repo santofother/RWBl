@@ -1,6 +1,6 @@
 # Running sessions: your cheat sheet
 
-Everything you need to drive Claude and Codex on Custom Chariot. Agents don't read this file.
+Everything you need to drive Claude and Codex on RWBL. Agents don't read this file.
 Replace the `<...>` parts in prompts and paste. Nothing else is needed: cards hold the details.
 
 ---
@@ -39,24 +39,24 @@ Up to **3 sessions at once** (for example 2 Codex + 1 Claude).
 ### First session only (C01)
 Claude Code, Opus 5.5, medium, folder `CustomChariot`, worktree **off**:
 ```text
-You're head engineer on Custom Chariot. Read AGENTS.md, then do card docs/sessions/C01-foundation.md. There's no git repo yet; the card creates it. Only stop to ask if you're blocked.
+You're head engineer on RWBL. Read AGENTS.md, then do card docs/sessions/C01-foundation.md. There's no git repo yet; the card creates it. Only stop to ask if you're blocked.
 ```
 
 ### Builder
 ```text
-You're a builder on Custom Chariot. Read AGENTS.md, then do card docs/sessions/<C05-track>.md on branch <c05-track>. Follow the card's Owns list, run the tests, write the handoff, and land it on main yourself following AGENTS.md step 8, without asking me. Only stop to ask if you're blocked.
+You're a builder on RWBL. Read AGENTS.md, then do card docs/sessions/<C05-track>.md on branch <c05-track>. Follow the card's Owns list, run the tests, write the handoff, and land it on main yourself following AGENTS.md step 8, without asking me. Only stop to ask if you're blocked.
 ```
 
 ### Merge
 Put what to merge in the `<...>`: `branch c05-track (worktree ../cc-c05)`, `PR 12`, or `every branch whose STATUS row is REVIEW`.
 ```text
-You're head engineer on Custom Chariot, doing a merge session. Merge into main: <what>.
+You're head engineer on RWBL, doing a merge session. Merge into main: <what>.
 
 For each branch, one at a time:
 1. `git checkout main && git pull origin main`. For a GitHub-only branch, `git fetch origin` and use `origin/<branch>`. For a local worktree branch, use its branch name and commit nothing in that worktree.
 2. Read its handoff docs/handoffs/<Cxx>.md and its STATUS.md row.
 3. `git merge <branch>`. On conflicts keep both sides' intent. If unsure which side wins, stop and ask me.
-4. Run tools/run_tests.sh (after new/moved files, first `$GODOT --headless --path custom-chariot --import`). All must pass. Fix only obvious merge mistakes; otherwise stop and tell me.
+4. Run tools/run_tests.sh (after new/moved files, first `$GODOT --headless --path rwbl --import`). All must pass. Fix only obvious merge mistakes; otherwise stop and tell me.
 5. In docs/STATUS.md set the row to DONE with today's date, flip TODO rows to READY whose dependencies are now all DONE, add a merge-log line. Commit.
 
 When all are merged and green, `git push origin main` (never force-push). Then list any "Contract change requested" items from the handoffs with your recommendation (don't change contracts yourself).
@@ -64,7 +64,7 @@ When all are merged and green, `git push origin main` (never force-push). Then l
 
 ### Question
 ```text
-You're the head engineer on Custom Chariot, answering a question. Make no changes unless I ask. Open only the files the question needs; docs/STATUS.md, docs/ARCHITECTURE.md and DESIGN.md are the usual starting points. Answer in under 15 lines. My question: <question>
+You're the head engineer on RWBL, answering a question. Make no changes unless I ask. Open only the files the question needs; docs/STATUS.md, docs/ARCHITECTURE.md and DESIGN.md are the usual starting points. Answer in under 15 lines. My question: <question>
 ```
 
 ### Fix
@@ -74,12 +74,12 @@ Read AGENTS.md. Bug from playtest: <what happened, what you expected, which buil
 
 ### Design change
 ```text
-You're head engineer on Custom Chariot. I want to change the design: <change>. Update DESIGN.md (keep its style, short), then list which cards in docs/STATUS.md and contracts in docs/ARCHITECTURE.md this affects and what you'd change. Change cards/ARCHITECTURE only after I say yes.
+You're head engineer on RWBL. I want to change the design: <change>. Update DESIGN.md (keep its style, short), then list which cards in docs/STATUS.md and contracts in docs/ARCHITECTURE.md this affects and what you'd change. Change cards/ARCHITECTURE only after I say yes.
 ```
 
 ### Triage (after a playtest)
 ```text
-You're head engineer on Custom Chariot, doing card C15 (triage). Playtest notes: <paste notes>. Read docs/STATUS.md, docs/PLAN.md §5 and the handoffs you need. Turn bugs into Fix cards, write detailed cards for the next wave in docs/sessions/, update STATUS.md and PLAN.md. Ask me before cutting or adding features that DESIGN.md doesn't have.
+You're head engineer on RWBL, doing card C15 (triage). Playtest notes: <paste notes>. Read docs/STATUS.md, docs/PLAN.md §5 and the handoffs you need. Turn bugs into Fix cards, write detailed cards for the next wave in docs/sessions/, update STATUS.md and PLAN.md. Ask me before cutting or adding features that DESIGN.md doesn't have.
 ```
 
 ### Cleanup worktrees
@@ -131,7 +131,7 @@ If `git merge` reports conflicts, don't fix them by hand: run the **Merge** prom
 C01 creates the local git repo. Then create the GitHub repo (private) and push. With the GitHub CLI:
 
 ```bash
-cd /Users/santofothergill/PersonalProjects/CustomChariot && gh repo create CustomChariot --private --source=. --push
+cd /Users/santofothergill/PersonalProjects/CustomChariot && gh repo create RWBL --private --source=. --push
 ```
 
 From then on, builders can self-merge and you can run cards in parallel.
@@ -140,7 +140,7 @@ From then on, builders can self-merge and you can run cards in parallel.
 
 ## Playtesting (new to Godot)
 
-- **Open the project:** run Godot → Import → pick `CustomChariot/custom-chariot/project.godot`.
+- **Open the project:** run Godot → Import → pick `CustomChariot/rwbl/project.godot`.
 - **Run the game:** press **F5** (or the ▶ button top right).
 - **Two players on one Mac:** menu **Debug → Customize Run Instances…** → enable multiple instances → set 2.
   F5 then opens two windows. Host in one, join `127.0.0.1` in the other.
