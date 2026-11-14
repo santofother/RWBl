@@ -133,7 +133,17 @@ func _test_driving() -> void:
 		print("[TEST] flat-out steer %.2f for 2.5 s: min speed %.1f, slip %.0f°, cart %.0f°, turned %.0f°" % [
 			steer, m.x, m.y, m.z, m.w])
 		if steer == 1.0:
-			_check(m.y > 20.0 and m.x < 0.75 * top, "flat-out full lock slides wide and scrubs speed")
+			_check(m.y > 15.0, "flat-out full lock drifts (slip %.0f°)" % m.y)
+			_check(m.x > 0.6 * top, "the drift keeps momentum (min %.1f m/s)" % m.x)
+	# Let go after a full-lock drift: it straightens out and powers on without losing much.
+	c.respawn(Transform3D.IDENTITY)
+	_run(c, 6.0, _inp(0.0))
+	_run(c, 1.5, _inp(1.0))
+	var mid := Vector2(_flat_speed(c), _slip_deg(c))
+	_run(c, 2.0, _inp(0.0))
+	print("[TEST] drift exit: at release %.1f m/s slip %.0f°, 2 s later %.1f m/s slip %.0f°" % [
+		mid.x, mid.y, _flat_speed(c), _slip_deg(c)])
+	_check(_slip_deg(c) < 8.0 and _flat_speed(c) > 0.8 * top, "drift exit: straightens out at speed")
 
 	var normal := _turn_slip(c, Surface.NORMAL, 0.5)
 	var oil := _turn_slip(c, Surface.OIL, 0.5)

@@ -19,7 +19,8 @@ extends Resource
 @export_range(0.5, 20.0) var steer_response := 5.0 # TUNE: how fast the horses ease into a turn (1/s)
 @export_range(0.0, 1.0) var steer_at_top_speed := 0.55 # TUNE: steering multiplier at max speed
 @export_range(0.0, 30.0) var horse_grip_rate := 6.0 # TUNE: how fast hooves kill sideways slip (1/s)
-@export_range(0.0, 80.0) var horse_max_lat_accel := 11.0 # TUNE: m/s², max sideways hold at grip 1
+@export_range(0.0, 80.0) var horse_max_lat_accel := 12.0 # TUNE: m/s², over this the chariot drifts
+@export_range(0.0, 3.0) var drift_scrub := 0.35 # TUNE: speed lost per s while sliding sideways (x sin slip)
 @export_group("Cart")
 @export_range(0.5, 6.0) var hitch_length := 2.0 # TUNE: m, hitch point to cart axle
 @export_range(0.0, 40.0) var hitch_stiffness := 6.0 # TUNE: spring pulling the cart back in line
@@ -29,6 +30,7 @@ extends Resource
 @export_range(0.0, 30.0) var cart_grip_rate := 6.0 # TUNE: how fast wheels kill sideways slip (1/s)
 @export_range(0.0, 80.0) var cart_max_lat_accel := 8.0 # TUNE: m/s², over this the cart slides (fishtail)
 @export_range(0.0, 1.0) var cart_pull := 0.8 # TUNE: how much a sliding cart yanks the horses
+@export_range(0.0, 1.0) var cart_drag := 0.15 # TUNE: how much a sliding cart brakes the horses
 @export_range(0.0, 5.0) var hitch_yank := 1.5 # TUNE: how hard a swinging cart twists the horses (spin-outs)
 @export_range(0.5, 3.0) var jackknife_angle := 1.75 # TUNE: rad, cart hits the horses here
 @export_range(0.0, 1.0) var jackknife_speed_loss := 0.5 # TUNE: fraction of speed lost on a jackknife

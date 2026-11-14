@@ -1,5 +1,5 @@
 extends CanvasLayer
-## F2 tuning panel (autoload `TuningPanel`). Owner: C04. Lets the user tune any registered Resource live
+## F2 / ` tuning panel (autoload `TuningPanel`). Owner: C04. Lets the user tune any registered Resource live
 ## with sliders (one per `@export_range` property, grouped by `@export_group`) and save it.
 ## Save: run from the editor binary -> writes the .tres at its res:// path (commit it to keep the numbers).
 ## Exported build -> writes `user://tuning/<file>.tres`, which register() loads over the default next start.
@@ -121,7 +121,10 @@ func load_override(res: Resource) -> bool:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed(&"toggle_tuning"):
+	# WHY: on Mac laptops F2 is a brightness key unless Fn is held, so ` (backquote) opens it too.
+	var k := event as InputEventKey
+	var backquote := k != null and k.pressed and not k.echo and k.physical_keycode == KEY_QUOTELEFT
+	if event.is_action_pressed(&"toggle_tuning") or backquote:
 		toggle()
 		get_viewport().set_input_as_handled()
 
@@ -145,7 +148,7 @@ func _build_ui() -> void:
 	var head := HBoxContainer.new()
 	v.add_child(head)
 	var title := Label.new()
-	title.text = "Tuning   (F2 closes)"
+	title.text = "Tuning   (F2 or ` closes)"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
 	var save := Button.new()

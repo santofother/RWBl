@@ -154,13 +154,12 @@ func step(input: ChariotInput, delta: float) -> void:
 		_yaw_rate *= 1.0 - clampf(0.5 * delta, 0.0, 1.0) # spins on in the air
 	rotate_y(_yaw_rate * delta)
 	if grounded:
-		# WHY: velocity keeps its old direction after the turn; grip below pulls it in line. Low grip = slide.
+		# WHY: velocity keeps its old direction after the turn; grip below swings it in line. Low grip = slide.
 		var fwd := get_forward()
+		var prev_speed := _flat(velocity).length()
 		var speed := _flat(velocity).dot(fwd)
 		velocity += fwd * (_drive(speed, input, stunned, delta) - speed)
-		var right := global_basis.x
-		velocity -= right * _grip_delta(_flat(velocity).dot(right), t.grip_for(surface), t.horse_grip_rate,
-			t.horse_max_lat_accel, delta)
+		_apply_grip(fwd, prev_speed, delta)
 	else:
 		velocity.y -= t.gravity * delta
 
@@ -411,6 +410,30 @@ static func _grip_delta(slip: float, grip: float, rate: float, max_accel: float,
 	return signf(slip) * mag
 
 
+## Hooves swing the velocity toward the horses' heading, keeping its speed, but only as fast as the grip's
+## max sideways accel allows. Past that the chariot drifts: it slides at an angle and loses just a little
+## speed (`drift_scrub`), so you carry momentum through a slide and power out of it.
+func _apply_grip(fwd: Vector3, prev_speed: float, delta: float) -> void:
+	var t := tuning
+	var flat := _flat(velocity)
+	var spd := flat.length()
+	var grip := t.grip_for(surface)
+	if spd < 0.5:
+		flat = fwd * flat.dot(fwd) # parked: no sideways creep
+	else:
+		var aim := fwd if flat.dot(fwd) >= 0.0 else -fwd
+		var slip := flat.signed_angle_to(aim, Vector3.UP)
+		var turn := minf(absf(slip) * clampf(grip * t.horse_grip_rate * delta, 0.0, 1.0),
+			grip * t.horse_max_lat_accel / spd * delta)
+		flat = flat.rotated(Vector3.UP, signf(slip) * turn)
+		flat *= 1.0 - clampf(t.drift_scrub * grip * absf(sin(slip)) * delta, 0.0, 1.0)
+		var cap := maxf(_top_speed(), prev_speed) # throttle mid-drift must not push past top speed
+		if flat.length() > cap:
+			flat = flat.normalized() * cap
+	velocity.x = flat.x
+	velocity.z = flat.z
+
+
 ## Cart on the hitch: grip at the axle, hitch spring/damper, jackknife. Also pulls the horses.
 func _step_cart(cart_surface: StringName, delta: float) -> void:
 	var t := tuning
@@ -422,7 +445,10 @@ func _step_cart(cart_surface: StringName, delta: float) -> void:
 		var dv := _grip_delta(slip, t.grip_for(cart_surface), t.cart_grip_rate, t.cart_max_lat_accel, delta)
 		var share := t.cart_pull * t.cart_mass / t.total_mass()
 		omega -= dv * (1.0 - share) / length
-		velocity -= cr * dv * share
+		# WHY: a sliding cart yanks the horses sideways but barely brakes them (drifts keep momentum).
+		var push := cr * dv * share
+		var fwd := get_forward()
+		velocity -= push - fwd * push.dot(fwd) * (1.0 - t.cart_drag)
 	cart_ang_vel = omega - _yaw_rate
 	var spring := -t.hitch_stiffness * cart_angle - t.hitch_damping * cart_ang_vel
 	cart_ang_vel += spring / t.cart_mass * delta
