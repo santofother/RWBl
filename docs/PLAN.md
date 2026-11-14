@@ -134,6 +134,14 @@ wildcards (reverse zone, wine fountain, mirror, Colosseum gate, emperor's thumb)
 Each item becomes its own small T3 card from the C10 template, so many run in parallel and split evenly
 between Claude and Codex.
 
+**Track pieces** (DESIGN §5.6), in order, each depends on the one before. C15 writes the cards once you've
+answered DESIGN §11 Q8 (who places pieces):
+| Card | Title | Suggested | Tier | Notes |
+|---|---|---|---|---|
+| T1 | Track pieces framework: `TrackPieceDef`, splice a piece into the centre line, rebuild road/walls/checkpoints, sharp turn + chicane | Claude | T1 | Bots, no-build zone and the C08 path check must follow the new shape |
+| T2 | Hills: uphill, downhill, crest/jump, banked turn | Claude | T2 | Track math and the chariot controller stop assuming flat ground; bots handle slopes |
+| T3 | Spiral loop: surface-following gravity, rolling camera, fall-off below a minimum speed | Claude | T1 | Hardest piece; needs T2 |
+
 ### Wave 5: art and audio
 | Work | Agent |
 |---|---|
@@ -176,5 +184,6 @@ Settled for this plan:
 Still open (decide when the card that needs it comes up):
 - One Steam app or several (Q4): before wave 6.
 - Track count and fixed loop vs arenas (Q5): after P1. Plan assumes one greybox loop track to start.
+- Who places track pieces (Q8, DESIGN §5.6): before C15 writes the T1–T3 cards.
 - Cross-game progression (Q7): after wave 6.
 - Proximity voice from LastMage in this game too? C01 copies it but leaves it off; turn on if you want it.

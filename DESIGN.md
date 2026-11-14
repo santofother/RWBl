@@ -99,6 +99,23 @@ Every item has tags (`flammable`, `slippery`, `heavy`, `hot`, `living`) so inter
 - Items cannot be placed on the start or finish line, and items need a minimum gap.
 - **Track validation:** the host checks that a drivable path still exists after each placement (flood fill on the track surface or a navigation check) and rejects placements that block it.
 
+### 5.6 Track pieces (planned, wave 4+)
+Besides items, the track itself can change shape. A track piece replaces a section of the road.
+| Piece | Effect |
+|---|---|
+| Sharp turn / hairpin | Tight corner, punishes speed, the cart swings wide |
+| Chicane / S-bend | Quick left-right, tests fishtail control |
+| Uphill / downhill | Slows climbing horses, downhill builds speed and makes braking harder |
+| Crest / jump | Small hill that launches fast chariots |
+| Banked turn | Lets you hold speed through a corner |
+| Spiral loop | Drive up and around a loop, upside down at the top. Too slow and you fall off |
+
+- Pieces keep the track a closed loop. The start/finish straight can't be changed.
+- Bots, checkpoints, the no-build zone and the blocked-road check follow the new shape.
+- Build order: shape and turns first, then hills, then loops. Loops need the chariot to stick to the road
+  (gravity along the road surface) and a camera that rolls with it.
+- Open: who places pieces and when (see §11 Q8).
+
 ## 6. Scoring
 
 ### Per-round
@@ -197,7 +214,7 @@ One Steam app for the whole hub, with each game as a mode, is the simplest. Sepa
 | **1. Feel prototype** | Slippery chariot controller on a flat track, tuning panel, N4 |
 | **2. Build phase** | Top-down placement, 6-8 items, host validation (N5) |
 | **3. Full loop** | Draft, build, race, score for a whole match |
-| **4. Combat and content** | Spears, wheels, damage, the rest of the item list, gore pass |
+| **4. Combat and content** | Spears, wheels, damage, the rest of the item list, track pieces (§5.6), gore pass |
 | **5. Extract core** | Pull the lobby and net layer out into the shared addon (reuse the mage game's where possible) |
 | **6. Hub** | Shell, game selection, shared profile |
 | **7. Polish** | Audio, tracks, UI, balance, playtests |
@@ -211,6 +228,9 @@ One Steam app for the whole hub, with each game as a mode, is the simplest. Sepa
 5. How many tracks or arenas ship at launch, and is the track a fixed arena or a loop?
 6. AI chariots to fill empty slots, or only real players?
 7. Cross-game progression (unlocks, currency) in the hub: in scope for v1 or later?
+8. **Track pieces (§5.6): who places them?** (a) Drafted like items and placed in the Build phase, so the track
+   changes every round. (b) Pre-made layouts built from pieces, one picked per match. (c) Both: a fixed base
+   layout plus one piece drafted per round. (b) is the simplest, (a) is the most chaotic.
 
 ## 12. Risks
 
