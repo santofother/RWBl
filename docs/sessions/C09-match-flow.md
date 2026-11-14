@@ -19,8 +19,9 @@ winner, identically on every peer.
   overrides; keep the rules keys contract and the standalone CLI).
 - Draft (host): deal 3 cards per player from `ItemDB.all_defs()` weighted by rarity. Catch-up: last place
   (by `m.scoring.get_totals()`) gets at least one `RARE`, the leader only `COMMON`s; round 1 = no catch-up.
-  Send each human its cards only (RPC to that peer → `hand_dealt`), bots pick on the host. Players keep 1 or
-  2 (`submit_pick`). Timeout → auto-keep the first card. All picked → `phase_end_requested(DRAFT)`.
+  Send each human its cards only (RPC to that peer → `hand_dealt`), bots pick on the host. Players keep exactly
+  1 (`submit_pick([i])`, DESIGN §3 changed 2026-11-14). Timeout → auto-keep the first card. All picked → `phase_end_requested(DRAFT)`.
+  Set `free_build: false` in `DEFAULT_RULES` once hands are real (C08 reads `rules.get("free_build", true)`).
   `hands_final` to all; `hand_of(slot)` returns the kept ids. Log `[Draft] DEAL slot ids`, `[Draft] KEEP slot ids`.
 - Phase loop: keep the host-driven RPC; honour `phase_end_requested` for every phase. After SCORE: someone ≥
   `win_score` or last round → `_finish()`. Last round = Grand Circus (`is_grand_circus()`, +1 lap; scoring

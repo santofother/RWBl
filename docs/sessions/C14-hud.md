@@ -16,7 +16,7 @@ Readable at a glance at 1080p while racing (pillar 3), and a draft screen that m
 - Race HUD: lap x/y, position 1st–5th, stamina bar (flashes when too tired to whip), wheel icons (2 = fine,
   broken = red), spear ammo placeholder (0 until wave 4), phase name + time left, big countdown 3-2-1-GO.
 - Draft UI (on `Draft.hand_dealt` for the local slot): 3 cards with name, rarity colour, category, description,
-  icon if any; click to select 1–2, Confirm → `Draft.submit_pick(indices)`; timer bar; "waiting for others".
+  icon if any; click to select 1, Confirm → `Draft.submit_pick(indices)`; timer bar; "waiting for others".
 - Build HUD: restyle C08's hand list and `place_result` toast to match (read BuildPhase signals; don't edit
   `build/`, ask C08's owner via "Contract change requested" if a hook is missing).
 - Style: one theme resource (`hud/hud_theme.tres`), big outlined text, player colours from `PlayerInfo.color`.

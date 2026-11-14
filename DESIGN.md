@@ -27,8 +27,8 @@ Each round has four phases:
 
 | Phase | Camera | Duration | What happens |
 |---|---|---|---|
-| Draft | UI | ~10s | Each player is dealt 3 cards and keeps 1 or 2 |
-| Build | Top-down | ~25s | Players place items on the track, all at once |
+| Draft | UI | ~10s | Each player is dealt 3 random cards (items and track pieces mixed) and keeps 1 |
+| Build | Top-down | ~25s | Each player places their one card (item or track piece) on the track, all at once |
 | Race | Third person behind chariot | ~60-90s | 1-2 laps |
 | Score | UI | ~10s | Points, replays of highlights, next round |
 
@@ -94,13 +94,16 @@ Every item has tags (`flammable`, `slippery`, `heavy`, `hot`, `living`) so inter
 - **Emperor's thumb:** at the end of a round, the placer boosts or penalizes one chosen player.
 
 ### 5.5 Draft and placement rules
-- 3 cards per player per round, weighted by rarity.
+- 3 random cards per player per round, weighted by rarity. Cards are items or track pieces (§5.6), mixed.
+- Each player keeps 1 card and places it in that round's Build phase.
 - **Catch-up through the draft:** last place gets a rare card, and the leader only draws commons.
 - Items cannot be placed on the start or finish line, and items need a minimum gap.
 - **Track validation:** the host checks that a drivable path still exists after each placement (flood fill on the track surface or a navigation check) and rejects placements that block it.
 
 ### 5.6 Track pieces (planned, wave 4+)
-Besides items, the track itself can change shape. A track piece replaces a section of the road.
+Besides items, the track itself can change shape. A track piece replaces a section of the road. Pieces are
+drafted like items (same cards, same rarity weights) and placed in the Build phase, so the track grows and
+changes every round. Pieces stay for the rest of the match, like items.
 | Piece | Effect |
 |---|---|
 | Sharp turn / hairpin | Tight corner, punishes speed, the cart swings wide |
@@ -114,7 +117,6 @@ Besides items, the track itself can change shape. A track piece replaces a secti
 - Bots, checkpoints, the no-build zone and the blocked-road check follow the new shape.
 - Build order: shape and turns first, then hills, then loops. Loops need the chariot to stick to the road
   (gravity along the road surface) and a camera that rolls with it.
-- Open: who places pieces and when (see §11 Q8).
 
 ## 6. Scoring
 
@@ -228,9 +230,8 @@ One Steam app for the whole hub, with each game as a mode, is the simplest. Sepa
 5. How many tracks or arenas ship at launch, and is the track a fixed arena or a loop?
 6. AI chariots to fill empty slots, or only real players?
 7. Cross-game progression (unlocks, currency) in the hub: in scope for v1 or later?
-8. **Track pieces (§5.6): who places them?** (a) Drafted like items and placed in the Build phase, so the track
-   changes every round. (b) Pre-made layouts built from pieces, one picked per match. (c) Both: a fixed base
-   layout plus one piece drafted per round. (b) is the simplest, (a) is the most chaotic.
+8. ~~Track pieces (§5.6): who places them?~~ **Decided:** drafted with items and placed in the Build phase,
+   one card per player per round (§3, §5.5).
 
 ## 12. Risks
 
