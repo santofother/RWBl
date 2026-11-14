@@ -3,7 +3,7 @@ extends Node3D
 ## speed / stamina / surface label, and a few surface patches (oil, mud, ice, gravel) to feel the grip.
 ## Owner: C04. No network: this script calls Chariot.step() itself.
 ## Keys: W/S throttle/brake, A/D steer, Space whip, R respawn, J jump (test ramp launch), 1/2 break a wheel,
-## F2 tuning panel.
+## F2 or ` tuning panel. Every key prints `[Game] TestDrive ...` and shows a message for 3 s.
 ## NET: none (local only).
 ## Public API: none.
 
@@ -17,6 +17,8 @@ const PATCHES := [
 
 var _input := PlayerInput.new()
 var _last_whip := 0
+var _msg := ""
+var _msg_t := 0.0
 
 @onready var _track: Track = $Track
 @onready var _chariot: Chariot = $Chariot
@@ -57,15 +59,26 @@ func _unhandled_input(event: InputEvent) -> void:
 	var k := event as InputEventKey
 	if k == null or not k.pressed or k.echo:
 		return
-	match k.keycode:
+	var c := _chariot
+	match k.physical_keycode: # WHY: physical = same key position on any keyboard layout
 		KEY_R:
-			_chariot.respawn(_track.respawn_transform(_track.progress_at(_chariot.global_position)))
+			c.respawn(_track.respawn_transform(_track.progress_at(c.global_position)))
+			_toast("R: respawned on the track centre line, standing still, wheels repaired")
 		KEY_J:
-			_chariot.apply_impulse(Vector3.UP * 10.0 * _chariot.tuning.horse_mass)
+			c.apply_impulse(Vector3.UP * 10.0 * c.tuning.horse_mass)
+			_toast("J: launched up (like a ramp) - watch it land")
 		KEY_1:
-			_chariot.damage_wheel(ChariotSnapshot.WHEEL_LEFT)
+			c.damage_wheel(ChariotSnapshot.WHEEL_LEFT)
+			_toast("1: left wheel broken - cart tilts, slower, pulls left. R repairs")
 		KEY_2:
-			_chariot.damage_wheel(ChariotSnapshot.WHEEL_RIGHT)
+			c.damage_wheel(ChariotSnapshot.WHEEL_RIGHT)
+			_toast("2: right wheel broken - cart tilts, slower, pulls right. R repairs")
+
+
+func _toast(text: String) -> void:
+	print("[Game] TestDrive " + text)
+	_msg = text
+	_msg_t = 3.0
 
 
 func _process(delta: float) -> void:
@@ -77,11 +90,13 @@ func _process(delta: float) -> void:
 	var want := cart + back * 5.5 + Vector3.UP * 3.2
 	_cam.global_position = _cam.global_position.lerp(want, 1.0 - exp(-7.0 * delta))
 	_cam.look_at(c.global_position + c.get_forward() * 3.0 + Vector3.UP * 1.0)
+	_msg_t -= delta
 	var lines := PackedStringArray([
+		"TEST DRIVE  (keys: W/S drive  A/D steer  Space whip  R respawn  J jump  1/2 break wheel  ` or F2 tuning)",
 		"speed %4.1f m/s   stamina %3d%%   surface %s" % [c.get_speed(), int(c.stamina * 100.0), c.surface],
 		"cart %+4.0f°   slip %+4.0f°   %s%s" % [rad_to_deg(c.cart_angle), _slip_deg(c),
 			"BOOST " if c.has_effect(Effects.BOOST) else "", "" if c.grounded else "AIR"],
-		"W/S drive  A/D steer  Space whip  R respawn  J jump  1/2 break wheel  F2 tuning",
+		">> " + _msg if _msg_t > 0.0 else "",
 	])
 	_label.text = "\n".join(lines)
 
