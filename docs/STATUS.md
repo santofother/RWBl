@@ -15,7 +15,7 @@ DONE (on main, date) · BLOCKED (reason)
 | C04 | Chariot controller + F2 tuning panel | 1 | Either (Claude) · T1 | C02 | DONE 2026-11-13 | c04-chariot |
 | C05 | Greybox loop track, laps, race camera v1 | 1 | Either (Codex) · T3 | C02 | DONE 2026-11-14 | c05-track-race |
 | C06 | Bot drivers + headless race harness | 1 | Either (Codex) · T3 | C02 | DONE 2026-11-14 | c06-bots |
-| C07 | Host-authoritative chariot netcode (N4) | 2 | Either (Claude) · T1 | C03, C04 | READY | |
+| C07 | Host-authoritative chariot netcode (N4) | 2 | Either (Claude) · T1 | C03, C04 | DONE 2026-11-14 | c07-netcode |
 | C08 | Build phase + placement validation (N5) | 2 | Either (Codex) · T2 | C05 | READY | |
 | C09 | Match flow: draft/build/race/score rounds | 2 | Either (Codex) · T2 | C05, C06 | READY | |
 | C10 | Item framework + first 8 items | 2 | Either · T2 | C04, C05 | READY | |
