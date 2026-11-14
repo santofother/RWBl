@@ -8,6 +8,8 @@ extends RefCounted
 ## NET: host only. Public API: `compute_input(chariot, track, delta) -> ChariotInput`, `tuning`, `seed_slot(slot)`,
 ##   `stuck_count`.
 
+const SCAN_HZ := 10.0 # WHY: surface_at() is costly (closest-point search); lanes change slowly
+
 ## Knobs (shared by all bots, set by BotManager).
 var tuning: BotTuning = preload("res://game/bots/default_tuning.tres")
 ## How many times this bot has got stuck.
@@ -22,6 +24,9 @@ var _still := 0.0
 var _reverse_left := 0.0
 var _reverse_steer := 0.0
 var _whip_wait := 0.0
+var _lane_bad := PackedInt32Array() # bad-surface samples per candidate lane, refreshed at SCAN_HZ
+var _scan_wait := 0.0
+var _patch_ahead := false # chosen lane still crosses a bad surface within reach
 
 
 ## Give this bot its personal spread (deterministic per slot).
@@ -66,6 +71,8 @@ func compute_input(chariot: Chariot, track: Track, delta: float) -> ChariotInput
 	var curve := _max_curve(track, p, t.preview)
 	var lat := t.corner_lat_accel * _skill * (0.8 + 0.4 * t.aggression)
 	var want := clampf(sqrt(lat / maxf(curve, 0.0005)), t.min_corner_speed, 60.0)
+	if _patch_ahead: # WHY: no lane is clean, so cross the patch slowly instead of sliding through at full speed
+		want = minf(want, t.patch_speed)
 	_out.throttle = 1.0 if speed < want else 0.0
 	_out.brake = 1.0 if speed > want + t.brake_margin else 0.0
 
@@ -140,6 +147,12 @@ func _update_offset(chariot: Chariot, track: Track, p: float, look: float, delta
 		if d > -2.0 and d < t.traffic_range * 1.5:
 			var hw := maxf(it.def.footprint.x, it.def.footprint.y) * 0.5 + 1.2
 			obstacles.append(Vector3(track.lateral_offset(it.global_position), hw, d))
+	_scan_wait -= delta
+	if _scan_wait <= 0.0 or _lane_bad.size() != 9:
+		_scan_wait = 1.0 / SCAN_HZ
+		_lane_bad.resize(9)
+		for k in 9:
+			_lane_bad[k] = _bad_surface_hits(track, p, lerpf(-half, half, k / 8.0), chariot.get_speed())
 	# Pick the free lateral position nearest to the wanted one among candidates.
 	var best := want
 	var best_cost := INF
@@ -150,8 +163,28 @@ func _update_offset(chariot: Chariot, track: Track, p: float, look: float, delta
 			if absf(cand - ob.x) < ob.y + t.lane_gap * 0.5:
 				blocked = true
 				break
-		var cost := absf(cand - want) + absf(cand - my_off) * 0.3 + (1000.0 if blocked else 0.0)
+		var bad := _lane_bad[k]
+		var cost := absf(cand - want) + absf(cand - my_off) * 0.3 + (1000.0 if blocked else 0.0) \
+			+ bad * t.patch_cost
 		if cost < best_cost:
 			best_cost = cost
 			best = cand
+			_patch_ahead = bad > 0
 	_offset = move_toward(_offset, best, t.offset_rate * delta)
+
+
+# Samples of lane `lateral` (m from the centre line) up to our reach that are not plain
+# road. Public Track API only (surface_at), so it sees every patch item without knowing item ids.
+func _bad_surface_hits(track: Track, p: float, lateral: float, speed: float) -> int:
+	var hits := 0
+	var reach := tuning.traffic_range * 1.5 + speed * 1.2 # WHY: a lane change takes ~1.5 s, so look further at speed
+	var d := 4.0
+	while d <= reach:
+		var xf := track.transform_at(p + d)
+		for side: float in [-0.9, 0.9]: # chariot is ~2 m wide
+			var pos := xf.origin + xf.basis.x * (lateral + side * 1.0)
+			if track.surface_at(pos) != Surface.NORMAL:
+				hits += 1
+				break
+		d += 4.0
+	return hits

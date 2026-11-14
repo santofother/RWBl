@@ -20,8 +20,10 @@ extends Resource
 @export_group("Traffic")
 @export_range(1.0, 10.0) var lane_gap := 3.0 # TUNE: m of lateral clearance kept from other chariots
 @export_range(5.0, 40.0) var traffic_range := 18.0 # TUNE: m ahead we react to chariots / items
-@export_range(0.5, 10.0) var offset_rate := 3.0 # TUNE: m/s the lateral offset moves
+@export_range(0.5, 10.0) var offset_rate := 4.0 # TUNE: m/s the lateral offset moves
 @export_range(0.5, 6.0) var edge_margin := 2.5 # TUNE: m kept from the road edge
+@export_range(0.0, 100.0) var patch_cost := 12.0 # TUNE: lane penalty per sample on oil/mud/ice/gravel (m of detour we'd accept)
+@export_range(3.0, 22.0) var patch_speed := 11.0 # TUNE: m/s cap when every lane has a patch ahead
 @export_group("Personality")
 @export_range(0.0, 1.0) var aggression := 0.5 # TUNE: higher = takes corners faster, whips more
 @export_range(0.0, 1.0) var skill_noise := 0.25 # TUNE: per-bot spread of speed/steer choices
