@@ -12,10 +12,10 @@ DONE (on main, date) · BLOCKED (reason)
 | C01 | Project + LastMage net core + cube sync (N1) | 0 | Claude only · T2 | — | DONE 2026-11-13 | main |
 | C02 | Architecture, contracts, stubs, cards C03–C14 | 0 | Claude only · T1 | C01 | DONE 2026-11-13 | c02-architecture |
 | C03 | Lobby: LAN discovery, Steam, ready-up (N2, N3) | 1 | Either (Codex) · T2 | C02 | DONE 2026-11-13 | c03-lobby |
-| C04 | Chariot controller + F2 tuning panel | 1 | Either (Claude) · T1 | C02 | READY | |
+| C04 | Chariot controller + F2 tuning panel | 1 | Either (Claude) · T1 | C02 | DONE 2026-11-13 | c04-chariot |
 | C05 | Greybox loop track, laps, race camera v1 | 1 | Either (Codex) · T3 | C02 | READY | |
 | C06 | Bot drivers + headless race harness | 1 | Either (Codex) · T3 | C02 | READY | |
-| C07 | Host-authoritative chariot netcode (N4) | 2 | Either (Claude) · T1 | C03, C04 | TODO | |
+| C07 | Host-authoritative chariot netcode (N4) | 2 | Either (Claude) · T1 | C03, C04 | READY | |
 | C08 | Build phase + placement validation (N5) | 2 | Either (Codex) · T2 | C05 | TODO | |
 | C09 | Match flow: draft/build/race/score rounds | 2 | Either (Codex) · T2 | C05, C06 | TODO | |
 | C10 | Item framework + first 8 items | 2 | Either · T2 | C04, C05 | TODO | |
