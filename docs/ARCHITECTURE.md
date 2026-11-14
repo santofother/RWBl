@@ -29,7 +29,7 @@ Main (lobby/main.tscn, C03)            menu, LAN/Steam lobby, ready-up; later th
 | Thing | Who decides | How others see it |
 |---|---|---|
 | Chariots | host runs `Chariot.step(input)` | snapshots 30 Hz → clients (C07: interpolate ~100 ms, predict own lightly) |
-| Inputs | each peer reads its own pad/keys (`PlayerInput`); host runs bots (`BotDriver`) | 9-byte `ChariotInput` → host `ChariotSync.submit_input()` (the only input path) |
+| Inputs | each peer reads its own pad/keys (`PlayerInput`); host runs bots (`BotDriver`) | 10-byte `ChariotInput` → host `ChariotSync.submit_input()` (the only input path) |
 | Phases, timers | host `MatchMode` | reliable RPC `(phase, round, end_time)`; `GameEvents.phase_changed` on all |
 | Draft, placement | host validates | RPCs; host spawns items on every peer |
 | Items, combat, laps, score | host | GameEvents (host) → scoring → `round_scored` RPC to all |
@@ -67,7 +67,8 @@ so wave-1 cards can work in parallel. The owner replaces the stub body and keeps
 ## 4. Contracts (files in `game/common/` unless noted)
 
 - **Input** `chariot_input.gd`: `steer -1..1, throttle 0..1, brake 0..1, whip, action` (one-tick bools the
-  sim reads), plus `whip_count/action_count` press counters (survive packet loss) and `seq`. Wire: 9 bytes.
+  sim reads), plus `whip_count/action_count/jump_count` press counters (survive packet loss) and `seq`; `jump` too.
+  Wire: 10 bytes (jump_count is byte 9, added by C04 with the user's OK).
 - **Snapshot** `chariot_snapshot.gd`: 15 floats `pos(3) rot quat(4) vel(3) cart_angle cart_ang_vel wheels
   stamina flags`. Packet = `[slot, 15 floats]*`. Add fields only at the end.
 - **Chariot** `chariot/chariot.gd`: root `Node3D` = horse pair, forward `-Z`, named `Chariot<slot>` under
@@ -107,7 +108,7 @@ so wave-1 cards can work in parallel. The owner replaces the stub body and keeps
 - **Autoloads:** NetworkManager, SteamManager, VoiceManager, DebugOverlay, GraphicsSettings (`core/`),
   GameEvents, NetClock (`game/common/`), TuningPanel (`game/tuning/`). `core/` never references `game/`.
 - **Input map:** `steer_left/right` (A/D, ←/→, left stick X), `throttle` (W, ↑, RT), `brake` (S, ↓, LT),
-  `whip` (Shift, pad A), `action` (F, pad X), `build_rotate_left/right` (Q/E, LB/RB), `build_place` (LMB,
+  `whip` (Shift, pad A), `jump` (Space, pad Y), `action` (F, pad X), `build_rotate_left/right` (Q/E, LB/RB), `build_place` (LMB,
   Enter, pad A), `build_cancel` (RMB, Esc, pad B), `toggle_tuning` (F2). F3 = debug overlay (core, hard-coded).
 - **Physics layers** (`common/layers.gd`): 1 world, 2 wall, 3 horses, 4 cart, 5 item_solid, 6 item_trigger,
   7 projectile, 8 pickup.

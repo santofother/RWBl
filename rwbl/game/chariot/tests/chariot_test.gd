@@ -252,6 +252,36 @@ func _test_air_and_effects() -> void:
 	_run(c, 2.5, _inp(0.0))
 	_check(c.grounded and absf(c.global_position.y) < 0.01 and not c.dead, "lands safely")
 
+	# Jump (player move): hops ~1 m, lands, cooldown, costs stamina, refused when stunned / crawling.
+	c.respawn(Transform3D.IDENTITY)
+	_run(c, 1.5, _inp(0.0))
+	var j := _inp(0.0)
+	j.jump = true
+	c.step(j, DT)
+	var peak := 0.0
+	var air_t := 0.0
+	while not c.grounded and air_t < 3.0:
+		c.step(_inp(0.0), DT)
+		peak = maxf(peak, c.global_position.y)
+		air_t += DT
+	print("[TEST] jump: peak %.2f m, %.2f s in the air, stamina %.2f" % [peak, air_t, c.stamina])
+	_check(peak > 0.8 and peak < 2.0 and air_t < 1.0 and c.grounded, "jump hops ~1 m and lands")
+	_check(c.stamina < 1.0, "jump costs stamina")
+	c.respawn(Transform3D.IDENTITY)
+	c.step(j, DT)
+	_run(c, 0.65, _inp(0.0))
+	c.step(j, DT)
+	_check(c.grounded, "jump cooldown: no second jump right after landing")
+	c.respawn(Transform3D.IDENTITY)
+	c.stun(1.0)
+	c.step(j, DT)
+	_check(c.grounded, "stunned horses can't jump")
+	c.respawn(Transform3D.IDENTITY)
+	c.damage_wheel(ChariotSnapshot.WHEEL_LEFT)
+	c.damage_wheel(ChariotSnapshot.WHEEL_RIGHT)
+	c.step(j, DT)
+	_check(c.grounded, "no jump on a crawling (wheel-less) cart")
+
 	c.respawn(Transform3D.IDENTITY)
 	c.stun(2.0)
 	_run(c, 1.0, _inp(1.0))

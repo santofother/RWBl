@@ -2,7 +2,7 @@ extends Node3D
 ## Offline test drive (F6 on test_drive.tscn): one Chariot on the Track, driven by PlayerInput, chase camera,
 ## speed / stamina / surface label, and a few surface patches (oil, mud, ice, gravel) to feel the grip.
 ## Owner: C04. No network: this script calls Chariot.step() itself.
-## Keys: W/S throttle/brake, A/D steer, Shift whip, R respawn, Space jump (test ramp launch), 1/2 break a wheel,
+## Keys: W/S throttle/brake, A/D steer, Shift whip, R respawn, Space jump, 1/2 break a wheel,
 ## F2 or ` tuning panel. Every key prints `[Game] TestDrive ...` and shows a message for 3 s.
 ## NET: none (local only).
 ## Public API: none.
@@ -17,6 +17,7 @@ const PATCHES := [
 
 var _input := PlayerInput.new()
 var _last_whip := 0
+var _last_jump := 0
 var _msg := ""
 var _msg_t := 0.0
 
@@ -50,6 +51,8 @@ func _physics_process(delta: float) -> void:
 	var inp := _input.read(0).copy()
 	inp.whip = inp.whip_count != _last_whip # same one-tick rule as ChariotSync._consume_input()
 	_last_whip = inp.whip_count
+	inp.jump = inp.jump_count != _last_jump
+	_last_jump = inp.jump_count
 	_chariot.step(inp, delta)
 	if _chariot.dead:
 		_chariot.respawn(_track.respawn_transform(_track.progress_at(_chariot.global_position)))
@@ -64,9 +67,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_R:
 			c.respawn(_track.respawn_transform(_track.progress_at(c.global_position)))
 			_toast("R: respawned on the track centre line, standing still, wheels repaired")
-		KEY_SPACE:
-			c.apply_impulse(Vector3.UP * 10.0 * c.tuning.horse_mass)
-			_toast("Space: launched up (like a ramp) - watch it land")
 		KEY_1:
 			c.damage_wheel(ChariotSnapshot.WHEEL_LEFT)
 			_toast("1: left wheel broken - cart tilts, slower, pulls left. R repairs")

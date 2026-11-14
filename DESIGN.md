@@ -45,7 +45,9 @@ Do **not** use a stock `RigidBody3D`. Write a custom controller. It is easier to
 - **Whip boost:** short burst on a tap, with stamina cost and cooldown. Spamming tires the horses.
 - **Damage model:** wheels can break. Losing one wheel gives a limp with worse turning. Losing both gives a crawl until respawn.
 - **Collisions:** the heavier or faster chariot wins. Cart hits damage wheels. Horse hits stun briefly.
-- **Controls:** stick to steer, accelerate/brake, whip, and one action button (throw spear or use pickup).
+- **Controls:** stick to steer, accelerate/brake, whip, jump, and one action button (throw spear or use pickup).
+- **Jump:** a short hop (about 1 m) on a cooldown that costs a little stamina. Use it to hop low traps and
+  surface patches, or to twist the chariot in the air before a corner. No jumping while stunned or with no wheels.
 
 Tuning parameters to expose in a debug panel: horse thrust, max speed, steering rate, hitch stiffness, lateral grip per surface, cart mass, whip boost and stamina.
 

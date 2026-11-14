@@ -29,7 +29,7 @@ var local_input_source: Callable
 var _chariots: Dictionary = {} # slot -> Node3D
 var _owners: Dictionary = {} # slot -> peer id that may send input for it
 var _inputs: Dictionary = {} # host: slot -> latest ChariotInput
-var _last_counts: Dictionary = {} # host: slot -> Vector2i(whip_count, action_count) already consumed
+var _last_counts: Dictionary = {} # host: slot -> Vector3i(whip_count, action_count, jump_count) already consumed
 var _snap_accum := 0.0
 var _player_input := PlayerInput.new()
 var _m: MatchMode
@@ -129,10 +129,12 @@ func _consume_input(slot: int) -> ChariotInput:
 	if inp == null:
 		return ChariotInput.new()
 	var out := inp.copy()
-	var last: Vector2i = _last_counts.get(slot, Vector2i(inp.whip_count, inp.action_count))
+	# FIX(C04, Claude): jump counter added to ChariotInput (user-approved jump move).
+	var last: Vector3i = _last_counts.get(slot, Vector3i(inp.whip_count, inp.action_count, inp.jump_count))
 	out.whip = inp.whip_count != last.x
 	out.action = inp.action_count != last.y
-	_last_counts[slot] = Vector2i(inp.whip_count, inp.action_count)
+	out.jump = inp.jump_count != last.z
+	_last_counts[slot] = Vector3i(inp.whip_count, inp.action_count, inp.jump_count)
 	return out
 
 

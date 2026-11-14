@@ -55,6 +55,11 @@ extends Resource
 @export_range(0.0, 1.0) var tired_threshold := 0.35 # TUNE: below this the boost is weaker, horses slower
 @export_range(0.0, 1.0) var tired_speed_mult := 0.8 # TUNE: top speed at 0 stamina
 @export_range(0.0, 5.0) var exhausted_delay := 1.5 # TUNE: s without regen after stamina hits 0
+@export_group("Jump")
+@export_range(0.0, 20.0) var jump_speed := 7.5 # TUNE: m/s up (≈1.1 m high, ≈0.6 s in the air)
+@export_range(0.0, 3.0) var jump_cooldown := 0.8 # TUNE: s between jumps
+@export_range(0.0, 1.0) var jump_stamina_cost := 0.1 # TUNE: of 1.0 (shares the whip's stamina)
+@export_range(0.0, 1.0) var air_steer := 0.35 # TUNE: steering in the air (pre-rotate for the landing)
 @export_group("Air")
 @export_range(0.0, 60.0) var gravity := 25.0 # TUNE: m/s² (arcade, heavier than 9.8)
 @export_range(0.0, 1.0) var landing_speed_loss := 0.15 # TUNE: on a hard landing

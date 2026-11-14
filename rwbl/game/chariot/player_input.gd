@@ -19,4 +19,6 @@ func read(_slot: int) -> ChariotInput:
 		_out.press_whip()
 	if Input.is_action_just_pressed(&"action"):
 		_out.press_action()
+	if Input.is_action_just_pressed(&"jump"):
+		_out.press_jump()
 	return _out

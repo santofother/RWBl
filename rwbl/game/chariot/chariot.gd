@@ -12,6 +12,7 @@ extends Node3D
 ## NET: host simulates (`step`). Clients only render (`apply_snapshot`); the owner may predict with `step`
 ## (C07). Never moved by stock RigidBody3D physics. step() never reads Input and has no RPCs.
 ## Public API:
+## Jump (input.jump): hop ~1 m on a cooldown for a little stamina; steering is weak (`air_steer`) in the air.
 ##   vars `slot`, `tuning`, `track`, `velocity`, `stamina`, `wheel_state`, `dead`, `frozen`, `cart_angle`,
 ##   `cart_ang_vel`, `grounded`, `surface`
 ##   step(input, delta), get_snapshot(), apply_snapshot(s), get_speed(), get_forward(), cart_global_position()
@@ -78,6 +79,7 @@ var surface: StringName = Surface.NORMAL
 
 var _effects: Dictionary = {} # StringName -> [time_left, strength, source_slot]
 var _whip_cd := 0.0
+var _jump_cd := 0.0
 var _exhausted_t := 0.0
 var _flags := 0 # client side: flags from the last snapshot
 var _sim_time := 0.0
@@ -134,6 +136,7 @@ func step(input: ChariotInput, delta: float) -> void:
 		_sync_bodies()
 		return
 	_try_whip(input)
+	_try_jump(input)
 	var t := tuning
 	surface = _surface_at(global_position)
 	var cart_surface := _surface_at(cart_global_position())
@@ -151,7 +154,9 @@ func step(input: ChariotInput, delta: float) -> void:
 		# Bounded yaw accel: a hard yank from the cart can beat the horses (spin-out).
 		_yaw_rate = move_toward(_yaw_rate, target, t.steer_rate * t.steer_response * delta)
 	else:
-		_yaw_rate *= 1.0 - clampf(0.5 * delta, 0.0, 1.0) # spins on in the air
+		# In the air the horses can still twist a little (air_steer): line up the landing.
+		var air := -_steer_from(input, stunned) * t.steer_rate * t.air_steer
+		_yaw_rate = move_toward(_yaw_rate, air, t.steer_rate * t.steer_response * delta)
 	rotate_y(_yaw_rate * delta)
 	if grounded:
 		# WHY: velocity keeps its old direction after the turn; grip below swings it in line. Low grip = slide.
@@ -275,6 +280,7 @@ func respawn(xform: Transform3D) -> void:
 	stamina = 1.0
 	_exhausted_t = 0.0
 	_whip_cd = 0.0
+	_jump_cd = 0.0
 	_yaw_rate = 0.0
 	grounded = true
 	dead = false
@@ -317,6 +323,7 @@ func _tick_timers(delta: float) -> void:
 		if _hit_cd[id] <= 0.0:
 			_hit_cd.erase(id)
 	_whip_cd = maxf(0.0, _whip_cd - delta)
+	_jump_cd = maxf(0.0, _jump_cd - delta)
 	if _exhausted_t > 0.0:
 		_exhausted_t -= delta # WHY: spamming to zero costs extra recovery time
 	else:
@@ -334,6 +341,20 @@ func _try_whip(input: ChariotInput) -> void:
 	if stamina <= 0.0:
 		_exhausted_t = t.exhausted_delay
 	add_effect(Effects.BOOST, t.whip_duration, strength, slot)
+
+
+## Jump: hop the whole chariot (DESIGN §4, user-approved). Needs ground, a free cooldown, some stamina and at
+## least one wheel; stunned horses can't jump. While airborne, surfaces (oil, mud) don't touch the wheels.
+func _try_jump(input: ChariotInput) -> void:
+	var t := tuning
+	if not input.jump or not grounded or _jump_cd > 0.0 or has_effect(Effects.STUN) \
+			or has_effect(Effects.TANGLED) or stamina < t.jump_stamina_cost \
+			or wheel_state == ChariotSnapshot.WHEEL_LEFT | ChariotSnapshot.WHEEL_RIGHT:
+		return
+	stamina -= t.jump_stamina_cost
+	_jump_cd = t.jump_cooldown
+	velocity.y = t.jump_speed
+	grounded = false
 
 
 func _steer_from(input: ChariotInput, stunned: bool) -> float:
