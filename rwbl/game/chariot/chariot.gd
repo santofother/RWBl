@@ -88,6 +88,10 @@ var _team_mat: Material
 var _team_surfaces: Array = [] # [MeshInstance3D, surface index]
 var _wheel_spin := 0.0
 var _gallop := 0.0
+var _vis_speed := 0.0 # visuals: last frame's speed / heading, smoothed accel and turn rate
+var _vis_yaw := 0.0
+var _vis_acc := 0.0
+var _vis_turn := 0.0
 
 @onready var _cart: Node3D = $Cart
 @onready var _tint: MeshInstance3D = $Horses
@@ -101,6 +105,7 @@ var _gallop := 0.0
 @onready var _wheel_r: Node3D = get_node_or_null(^"Cart/CartModel/Body/WheelR")
 @onready var _horse_l: Node3D = get_node_or_null(^"HorseModel/HorseL")
 @onready var _horse_r: Node3D = get_node_or_null(^"HorseModel/HorseR")
+@onready var _horse_model: Node3D = get_node_or_null(^"HorseModel")
 
 
 func _ready() -> void:
@@ -137,13 +142,18 @@ func step(input: ChariotInput, delta: float) -> void:
 	var stunned := has_effect(Effects.STUN)
 
 	# Horses: steering, thrust/brake, sideways grip. Only with hooves on the ground.
-	_yaw_rate = 0.0
 	if grounded:
 		var speed0 := _flat(velocity).dot(get_forward())
 		var authority := clampf(absf(speed0) / t.steer_full_speed, 0.0, 1.0) \
 			* lerpf(1.0, t.steer_at_top_speed, clampf(absf(speed0) / t.max_speed, 0.0, 1.0))
-		_yaw_rate = -_steer_from(input, stunned) * t.steer_rate * authority * (1.0 if speed0 >= -0.1 else -1.0)
-		rotate_y(_yaw_rate * delta)
+		var target := -_steer_from(input, stunned) * t.steer_rate * authority * (1.0 if speed0 >= -0.1 else -1.0)
+		# WHY: horses ease into a turn (yaw has inertia) and the cart can yank them off it (_step_cart).
+		# Bounded yaw accel: a hard yank from the cart can beat the horses (spin-out).
+		_yaw_rate = move_toward(_yaw_rate, target, t.steer_rate * t.steer_response * delta)
+	else:
+		_yaw_rate *= 1.0 - clampf(0.5 * delta, 0.0, 1.0) # spins on in the air
+	rotate_y(_yaw_rate * delta)
+	if grounded:
 		# WHY: velocity keeps its old direction after the turn; grip below pulls it in line. Low grip = slide.
 		var fwd := get_forward()
 		var speed := _flat(velocity).dot(fwd)
@@ -266,6 +276,7 @@ func respawn(xform: Transform3D) -> void:
 	stamina = 1.0
 	_exhausted_t = 0.0
 	_whip_cd = 0.0
+	_yaw_rate = 0.0
 	grounded = true
 	dead = false
 	_effects.clear()
@@ -413,7 +424,12 @@ func _step_cart(cart_surface: StringName, delta: float) -> void:
 		omega -= dv * (1.0 - share) / length
 		velocity -= cr * dv * share
 	cart_ang_vel = omega - _yaw_rate
-	cart_ang_vel += (-t.hitch_stiffness * cart_angle - t.hitch_damping * cart_ang_vel) / t.cart_mass * delta
+	var spring := -t.hitch_stiffness * cart_angle - t.hitch_damping * cart_ang_vel
+	cart_ang_vel += spring / t.cart_mass * delta
+	# The hitch twists the horses the other way: a cart swinging out drags their heading (spin-outs).
+	var yank := -spring * t.hitch_yank * t.cart_mass / t.horse_mass * delta
+	_yaw_rate += yank
+	cart_ang_vel -= yank # the cart's world yaw is unchanged; only the horses turned
 	cart_angle += cart_ang_vel * delta
 	if absf(cart_angle) > t.jackknife_angle:
 		cart_angle = signf(cart_angle) * t.jackknife_angle
@@ -664,14 +680,29 @@ func _process(delta: float) -> void:
 			tilt = -0.14
 		_cart_model.rotation.z = tilt
 		_cart_model.position.y = -0.4 if wheel_state == 3 else 0.0
+	# Pull cues (from motion only, so clients see them too): horses lunge ahead and dig in when they
+	# accelerate, sit back when braking, lean into turns, gallop harder while pulling.
+	if delta > 0.0:
+		var yaw := global_rotation.y
+		var k := clampf(8.0 * delta, 0.0, 1.0)
+		_vis_acc = lerpf(_vis_acc, (speed - _vis_speed) / delta, k)
+		_vis_turn = lerpf(_vis_turn, wrapf(yaw - _vis_yaw, -PI, PI) / delta, k)
+		_vis_speed = speed
+		_vis_yaw = yaw
+	var pull := clampf(_vis_acc / 8.0, -1.0, 1.0)
+	if _horse_model:
+		_horse_model.position.z = -pull * 0.3
+		_horse_model.rotation.x = -pull * 0.08
+		_horse_model.rotation.z = clampf(_vis_turn * absf(speed) * 0.012, -0.22, 0.22)
 	var gait := clampf(absf(speed) / 6.0, 0.0, 1.0) if grounded else 0.0
+	gait *= 1.0 + maxf(pull, 0.0) * 0.8
 	_gallop = fmod(_gallop + absf(speed) * delta * 0.45, 2.0)
 	for i in 2:
 		var h := _horse_l if i == 0 else _horse_r
 		if h:
 			var ph := (_gallop + i * 0.4) * PI
 			h.position.y = absf(sin(ph)) * 0.09 * gait
-			h.rotation.x = sin(ph * 2.0) * 0.05 * gait
+			h.rotation.x = sin(ph * 2.0) * 0.05 * gait - maxf(pull, 0.0) * 0.12
 
 
 func _collect_team_surfaces() -> void:

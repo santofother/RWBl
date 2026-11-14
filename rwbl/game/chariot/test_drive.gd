@@ -70,10 +70,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _process(delta: float) -> void:
 	var c := _chariot
-	var back := c.global_basis.z
-	var want := c.global_position + back * 10.0 + Vector3.UP * 4.5
-	_cam.global_position = _cam.global_position.lerp(want, 1.0 - exp(-4.0 * delta))
-	_cam.look_at(c.global_position + c.get_forward() * 4.0 + Vector3.UP * 1.2)
+	# WHY: ride behind the cart (where the driver stands) and look at the horses, so you see them haul
+	# you around and the cart swing, instead of being glued to the horses' heading.
+	var cart := c.cart_global_position()
+	var back := (cart - c.global_position).normalized()
+	var want := cart + back * 5.5 + Vector3.UP * 3.2
+	_cam.global_position = _cam.global_position.lerp(want, 1.0 - exp(-7.0 * delta))
+	_cam.look_at(c.global_position + c.get_forward() * 3.0 + Vector3.UP * 1.0)
 	var lines := PackedStringArray([
 		"speed %4.1f m/s   stamina %3d%%   surface %s" % [c.get_speed(), int(c.stamina * 100.0), c.surface],
 		"cart %+4.0f°   slip %+4.0f°   %s%s" % [rad_to_deg(c.cart_angle), _slip_deg(c),

@@ -83,14 +83,14 @@ func _slip_deg(c: Chariot) -> float:
 	return 0.0 if v.length() < 1.0 else rad_to_deg(absf(c.get_forward().signed_angle_to(v, Vector3.UP)))
 
 
-## Max horse slip angle and max |cart angle| (degrees) while turning hard on `s` at speed.
-func _turn_slip(c: Chariot, s: StringName) -> Vector2:
+## Max horse slip angle and max |cart angle| (degrees) while turning with `steer` on `s` at speed.
+func _turn_slip(c: Chariot, s: StringName, steer: float) -> Vector2:
 	_set_surface(Surface.NORMAL)
 	c.respawn(Transform3D.IDENTITY)
 	_run(c, 2.0, _inp(0.0))
 	_set_surface(s)
 	var out := Vector2.ZERO
-	var inp := _inp(1.0)
+	var inp := _inp(steer)
 	for i in 120:
 		c.step(inp, DT)
 		out.x = maxf(out.x, _slip_deg(c))
@@ -117,10 +117,28 @@ func _test_driving() -> void:
 	_check(absf(turned) > PI * 0.5, "full steer turns %.0f° in 3 s (> 90)" % rad_to_deg(absf(turned)))
 	_check(turned < 0.0, "steer +1 turns right")
 
-	var normal := _turn_slip(c, Surface.NORMAL)
-	var oil := _turn_slip(c, Surface.OIL)
+	# Flat out into full lock at top speed must not be free: it slides wide and scrubs speed.
+	for steer: float in [1.0, 0.75, 0.5, 0.25]:
+		c.respawn(Transform3D.IDENTITY)
+		_run(c, 6.0, _inp(0.0))
+		var m := Vector4(c.get_speed(), 0.0, 0.0, 0.0) # min speed, max slip, max cart angle, yaw turned
+		var f := c.get_forward()
+		for i in 150:
+			c.step(_inp(steer), DT)
+			m.x = minf(m.x, _flat_speed(c))
+			m.y = maxf(m.y, _slip_deg(c))
+			m.z = maxf(m.z, absf(rad_to_deg(c.cart_angle)))
+			m.w += rad_to_deg(absf(f.signed_angle_to(c.get_forward(), Vector3.UP)))
+			f = c.get_forward()
+		print("[TEST] flat-out steer %.2f for 2.5 s: min speed %.1f, slip %.0f°, cart %.0f°, turned %.0f°" % [
+			steer, m.x, m.y, m.z, m.w])
+		if steer == 1.0:
+			_check(m.y > 20.0 and m.x < 0.75 * top, "flat-out full lock slides wide and scrubs speed")
+
+	var normal := _turn_slip(c, Surface.NORMAL, 0.5)
+	var oil := _turn_slip(c, Surface.OIL, 0.5)
 	print("[TEST] slip normal %.1f° cart %.1f° | oil %.1f° cart %.1f°" % [normal.x, normal.y, oil.x, oil.y])
-	_check(oil.x > 2.0 * normal.x + 5.0, "oil slip angle much larger than normal")
+	_check(oil.x > 2.0 * normal.x + 5.0, "half lock: oil slip angle much larger than normal")
 
 	# Whip
 	c.respawn(Transform3D.IDENTITY)
@@ -157,9 +175,7 @@ func _test_snapshot() -> void:
 	var a := _spawn(Vector3.ZERO)
 	var b := _spawn(Vector3(60, 0, 60))
 	_run(a, 1.5, _inp(0.0))
-	_set_surface(Surface.OIL)
-	_run(a, 0.8, _inp(0.8))
-	_set_surface(Surface.NORMAL)
+	_run(a, 0.8, _inp(1.0))
 	b.apply_snapshot(a.get_snapshot())
 	_check(a.global_position.distance_to(b.global_position) < 0.01, "snapshot reproduces position")
 	_check(a.global_basis.get_rotation_quaternion().angle_to(b.global_basis.get_rotation_quaternion()) < 0.01,
