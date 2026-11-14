@@ -11,7 +11,7 @@ DONE (on main, date) · BLOCKED (reason)
 |---|---|---|---|---|---|---|
 | C01 | Project + LastMage net core + cube sync (N1) | 0 | Claude only · T2 | — | DONE 2026-11-13 | main |
 | C02 | Architecture, contracts, stubs, cards C03–C14 | 0 | Claude only · T1 | C01 | DONE 2026-11-13 | c02-architecture |
-| C03 | Lobby: LAN discovery, Steam, ready-up (N2, N3) | 1 | Either (Codex) · T2 | C02 | READY | |
+| C03 | Lobby: LAN discovery, Steam, ready-up (N2, N3) | 1 | Either (Codex) · T2 | C02 | DONE 2026-11-13 | c03-lobby |
 | C04 | Chariot controller + F2 tuning panel | 1 | Either (Claude) · T1 | C02 | READY | |
 | C05 | Greybox loop track, laps, race camera v1 | 1 | Either (Codex) · T3 | C02 | READY | |
 | C06 | Bot drivers + headless race harness | 1 | Either (Codex) · T3 | C02 | READY | |
