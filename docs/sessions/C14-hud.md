@@ -1,5 +1,6 @@
 # C14 — HUD: lap, position, stamina, ammo, phase timer, draft cards UI
-Agent: **Either** (suggested Codex; Terra for the screenshot check) · Tier: **T3** · Wave 3 · Branch: `c14-hud`
+Agent: **Either** (suggested Codex) · Wave 3 · Branch: `c14-hud`
+Model: Codex **GPT-6.1 Sol, medium (or GPT-6 Luna, high)** · or Claude **Sonnet 5.5, medium** · screenshot check: Codex **GPT-6.1 Terra**
 Depends on: C09
 
 Owns: `rwbl/game/hud/**`, `tools/tests/hud_test.sh`

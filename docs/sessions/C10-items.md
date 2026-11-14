@@ -1,5 +1,6 @@
 # C10 — Item framework + tag interaction table + first 8 items
-Agent: **Either** · Tier: **T2** · Wave 2 · Branch: `c10-items`
+Agent: **Either** · Wave 2 · Branch: `c10-items`
+Model: Codex **GPT-6.1 Sol, high** · or Claude **Opus 5.5, medium**
 Depends on: C04, C05
 
 Owns: `rwbl/game/items/**`, `tools/tests/items_test.sh`

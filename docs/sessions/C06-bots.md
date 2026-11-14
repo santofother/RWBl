@@ -1,5 +1,6 @@
 # C06 — Bot drivers + headless race harness
-Agent: **Either** (suggested Codex) · Tier: **T3** · Wave 1 · Branch: `c06-bots`
+Agent: **Either** (suggested Codex) · Wave 1 · Branch: `c06-bots`
+Model: Codex **GPT-6.1 Sol, medium (or GPT-6 Luna, high)** · or Claude **Sonnet 5.5, medium**
 Depends on: C02
 
 Owns: `rwbl/game/bots/**`, `tools/tests/bot_race_test.sh`, `tools/tests/bot_soak_test.sh` (optional, long)

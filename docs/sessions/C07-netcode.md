@@ -1,5 +1,6 @@
 # C07 — Host-authoritative chariot netcode: interpolation, light prediction, lag sim (N4)
-Agent: **Either** (suggested Claude) · Tier: **T1** · Wave 2 · Branch: `c07-netcode`
+Agent: **Either** (suggested Claude) · Wave 2 · Branch: `c07-netcode`
+Model: Claude **Opus 5.5, high** · or Codex **GPT-6 Astra, low–medium**
 Depends on: C03, C04
 
 Owns: `rwbl/game/net/**`, `tools/tests/chariot_net_test.sh`

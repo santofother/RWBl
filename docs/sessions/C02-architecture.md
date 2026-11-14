@@ -1,5 +1,6 @@
 # C02 — Architecture, contracts, stubs, wave 1–3 cards
-Agent: **Claude only** (head engineer) · Tier: **T1** · Claude: Opus 5.5, high · Wave 0 · Branch: `c02-architecture`
+Agent: **Claude only** (head engineer) · Wave 0 · Branch: `c02-architecture`
+Model: Claude **Opus 5.5, high**
 Depends on: C01 · Run in a worktree once the GitHub repo exists (otherwise main folder, on the branch)
 
 Owns: `docs/ARCHITECTURE.md`, `docs/sessions/`, `docs/STATUS.md`, `rwbl/game/**` (stubs only),

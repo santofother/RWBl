@@ -1,5 +1,6 @@
 # C12 — Damage: wheels, collisions, stun, respawn, crow spectator
-Agent: **Either** (suggested Claude) · Tier: **T2** · Wave 3 · Branch: `c12-damage`
+Agent: **Either** (suggested Claude) · Wave 3 · Branch: `c12-damage`
+Model: Claude **Opus 5.5, medium** · or Codex **GPT-6.1 Sol, high**
 Depends on: C07, C10
 
 Owns: `rwbl/game/combat/**`, `tools/tests/combat_test.sh`, and in `rwbl/game/chariot/`: the damage functions

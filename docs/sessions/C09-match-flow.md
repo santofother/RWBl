@@ -1,5 +1,6 @@
 # C09 — Match flow: Draft → Build → Race → Score, rounds, Grand Circus, catch-up dealing
-Agent: **Either** (suggested Codex) · Tier: **T2** · Wave 2 · Branch: `c09-match-flow`
+Agent: **Either** (suggested Codex) · Wave 2 · Branch: `c09-match-flow`
+Model: Codex **GPT-6.1 Sol, high** · or Claude **Opus 5.5, medium**
 Depends on: C05, C06
 
 Owns: `rwbl/game/match/**`, `rwbl/game/draft/**`, `tools/tests/match_test.sh`

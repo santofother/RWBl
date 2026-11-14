@@ -1,5 +1,6 @@
 # C13 — Camera swing Build → Race, race camera polish (FOV, sway, pullback)
-Agent: **Either** · Tier: **T3** · Wave 3 · Branch: `c13-camera`
+Agent: **Either** · Wave 3 · Branch: `c13-camera`
+Model: Codex **GPT-6.1 Sol, medium (or GPT-6 Luna, high)** · or Claude **Sonnet 5.5, medium**
 Depends on: C05, C08
 
 Owns: `rwbl/game/camera/**` (all files, including C05's race camera and C08's build camera), `tools/tests/camera_test.sh`

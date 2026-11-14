@@ -1,5 +1,6 @@
 # C03 — Lobby: LAN discovery, Steam lobby, 5 slots, ready-up, match start (N2, N3)
-Agent: **Either** (suggested Codex) · Tier: **T2** · Wave 1 · Branch: `c03-lobby`
+Agent: **Either** (suggested Codex) · Wave 1 · Branch: `c03-lobby`
+Model: Codex **GPT-6.1 Sol, high** · or Claude **Opus 5.5, medium**
 Depends on: C02
 
 Owns: `rwbl/game/lobby/**`, `tools/tests/lobby_test.sh`, `rwbl/project.godot` (**`run/main_scene` line only**),

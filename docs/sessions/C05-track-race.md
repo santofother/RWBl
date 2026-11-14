@@ -1,5 +1,6 @@
 # C05 — Greybox loop track, checkpoints, laps, finish order, race camera v1
-Agent: **Either** (suggested Codex) · Tier: **T3** · Wave 1 · Branch: `c05-track-race`
+Agent: **Either** (suggested Codex) · Wave 1 · Branch: `c05-track-race`
+Model: Codex **GPT-6.1 Sol, medium (or GPT-6 Luna, high)** · or Claude **Sonnet 5.5, medium**
 Depends on: C02
 
 Owns: `rwbl/game/track/**`, `rwbl/game/race/**`, `rwbl/game/camera/race_camera.gd`, `rwbl/game/camera/race_camera.tscn`,

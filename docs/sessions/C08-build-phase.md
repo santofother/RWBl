@@ -1,5 +1,6 @@
 # C08 — Build phase: top-down camera, grid/snap, ghost, rotate, placement RPC, host validation (N5)
-Agent: **Either** (suggested Codex) · Tier: **T2** · Wave 2 · Branch: `c08-build-phase`
+Agent: **Either** (suggested Codex) · Wave 2 · Branch: `c08-build-phase`
+Model: Codex **GPT-6.1 Sol, high** · or Claude **Opus 5.5, medium**
 Depends on: C05
 
 Owns: `rwbl/game/build/**`, `rwbl/game/camera/build_camera.gd`, `rwbl/game/camera/build_camera.tscn`,

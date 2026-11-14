@@ -1,5 +1,6 @@
 # C01 — Foundation: project, LastMage net core, cube sync (N1)
-Agent: **Claude only** (head engineer) · Tier: **T2** · Claude: Opus 5.5, medium · Wave 0 · Branch: `main`
+Agent: **Claude only** (head engineer) · Wave 0 · Branch: `main`
+Model: Claude **Opus 5.5, medium**
 Depends on: — · Run in the main `CustomChariot` folder, **no worktree** (there's no git repo yet)
 
 Owns: everything (first session). Source to copy from (read-only): `/Users/santofothergill/PersonalProjects/LastMage`

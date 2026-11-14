@@ -1,5 +1,6 @@
 # C11 — Scoring incl. anti-grief rule + score screen
-Agent: **Either** (suggested Codex) · Tier: **T3** · Wave 3 · Branch: `c11-scoring`
+Agent: **Either** (suggested Codex) · Wave 3 · Branch: `c11-scoring`
+Model: Codex **GPT-6.1 Sol, medium (or GPT-6 Luna, high)** · or Claude **Sonnet 5.5, medium**
 Depends on: C09, C10
 
 Owns: `rwbl/game/scoring/**`, `tools/tests/score_test.sh`

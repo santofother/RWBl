@@ -1,5 +1,6 @@
 # C04 — Chariot controller + F2 tuning panel (offline)
-Agent: **Either** (suggested Claude) · Tier: **T1** · Wave 1 · Branch: `c04-chariot`
+Agent: **Either** (suggested Claude) · Wave 1 · Branch: `c04-chariot`
+Model: Claude **Opus 5.5, high** · or Codex **GPT-6 Astra, low–medium**
 Depends on: C02
 
 Owns: `rwbl/game/chariot/**`, `rwbl/game/tuning/**`, `tools/tests/chariot_test.sh`
