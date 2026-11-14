@@ -1,6 +1,17 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3]
 
 [ext_resource type="Script" path="res://game/track/track.gd" id="1"]
 
-[node name="Track" type="Node3D"]
+[sub_resource type="Curve3D" id="Curve3D_ajufq"]
+bake_interval = 0.5
+_data = {
+"points": PackedVector3Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13.254834, 0, 0, 190, 0, 0, 5.793872e-07, 0, -13.254834, -5.793872e-07, 0, 13.254834, 214, 0, 24.000002, 13.254834, 0, 1.1587744e-06, 0, 0, 0, 190, 0, 48, 0, 0, 0, -10.873876, 0, -9.506244e-07, 130, 0, 47.999996, 7.6889915, 0, -7.6889906, -7.6889915, 0, 7.6889906, 101.00862, 0, 60.00862, 10.873875, 0, 6.481335e-07, 0, 0, 0, 72.01724, 0, 72.01724, 0, 0, 0, -19.88225, 0, -1.1850746e-06, -49.98275, 0, 72.017235, -2.0541552e-06, 0, 19.88225, 2.0541552e-06, 0, -19.88225, -85.98274, 0, 36.017235, -19.88225, 0, -2.923236e-06, 0, 0, 0, -49.982742, 0, 0.017242432, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+"tilts": PackedFloat32Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+}
+point_count = 11
+
+[node name="Track" type="Node3D" unique_id=195324534]
 script = ExtResource("1")
+
+[node name="Path" type="Path3D" parent="." unique_id=1046869744]
+curve = SubResource("Curve3D_ajufq")

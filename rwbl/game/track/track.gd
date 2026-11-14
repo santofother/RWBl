@@ -1,8 +1,8 @@
 class_name Track
 extends Node3D
 ## The race track: ground, centre line, surfaces, start grid, checkpoints, build zones (DESIGN §5.5, §7).
-## Owner: C05. C02 STUB: a flat stadium oval built in code (two straights + two half circles).
-## C05 replaces the shape/visuals (greybox loop with walls); keep the public API.
+## Owner: C05. Greybox loop: the centre line is the `Path3D` child "Path" in track.tscn (edit it in the editor;
+## the last point must equal the first so the loop closes). Road mesh, walls and ground are generated from it.
 ## NET: identical on every peer (static data + item surface patches, which every peer registers itself).
 ## Public API (all positions world space, `progress` = metres along the centre line from the start line):
 ##   track_width, length(), get_center_curve(), progress_at(pos), point_at(progress), transform_at(progress),
@@ -13,9 +13,9 @@ extends Node3D
 
 ## Drivable width in metres.
 @export var track_width := 14.0 # TUNE
-## Stub shape: straight length and turn radius.
-@export var straight_length := 70.0
-@export var turn_radius := 28.0
+## Wall height (m) and thickness (m).
+@export var wall_height := 1.6 # TUNE
+@export var wall_thickness := 0.8 # TUNE
 
 ## No items between NO_BUILD_BEFORE metres before the start line (grid) and NO_BUILD_AFTER after it.
 const NO_BUILD_BEFORE := 28.0
@@ -23,13 +23,24 @@ const NO_BUILD_AFTER := 10.0
 const CHECKPOINTS := 8
 const GRID_ROW_GAP := 5.0
 const GRID_FIRST_ROW := 5.0
+const MESH_STEP := 2.0 # metres between road/wall mesh slices
 
-var _curve := Curve3D.new()
+var _curve: Curve3D
+var _bounds_local := AABB()
 var _patches: Dictionary = {} # Node3D -> [surface, half_extents]
 
 
 func _ready() -> void:
-	_build_curve()
+	var path := get_node_or_null(^"Path") as Path3D
+	if path and path.curve:
+		_curve = path.curve
+	else: # WHY: Track.new() in a test has no scene children; borrow the curve from track.tscn
+		var packed := load("res://game/track/track.tscn") as PackedScene
+		var tmp := packed.instantiate()
+		_curve = (tmp.get_node(^"Path") as Path3D).curve
+		tmp.free()
+	_curve.bake_interval = 0.5
+	_compute_bounds()
 	_build_visuals()
 
 
@@ -134,39 +145,23 @@ func is_in_no_build_zone(pos: Vector3, radius: float = 0.0) -> bool:
 
 ## World-space box containing the whole track (build camera, validation grid).
 func get_bounds() -> AABB:
-	var half_x := straight_length * 0.5 + turn_radius + track_width
-	var half_z := turn_radius + track_width
-	return AABB(global_position + Vector3(-half_x, -1.0, -half_z), Vector3(half_x * 2.0, 2.0, half_z * 2.0))
+	return AABB(global_position + _bounds_local.position, _bounds_local.size)
 
 
-# ---------------------------------------------------------------- stub shape
-
-func _stadium_point(s: float) -> Vector3:
-	var l := straight_length
-	var r := turn_radius
-	var per := 2.0 * l + 2.0 * PI * r
-	s = fposmod(s + l * 0.5, per) # start line in the middle of the first straight
-	if s < l:
-		return Vector3(-l * 0.5 + s, 0.0, r)
-	s -= l
-	if s < PI * r:
-		var a := s / r
-		return Vector3(l * 0.5 + r * sin(a), 0.0, r * cos(a))
-	s -= PI * r
-	if s < l:
-		return Vector3(l * 0.5 - s, 0.0, -r)
-	var b := (s - l) / r
-	return Vector3(-l * 0.5 - r * sin(b), 0.0, -r * cos(b))
+func _compute_bounds() -> void:
+	var pts := _curve.get_baked_points()
+	var lo := Vector3(INF, 0.0, INF)
+	var hi := Vector3(-INF, 0.0, -INF)
+	for p in pts:
+		lo.x = minf(lo.x, p.x)
+		lo.z = minf(lo.z, p.z)
+		hi.x = maxf(hi.x, p.x)
+		hi.z = maxf(hi.z, p.z)
+	var m := track_width * 0.5 + wall_thickness + 1.0
+	_bounds_local = AABB(Vector3(lo.x - m, -1.0, lo.z - m), Vector3(hi.x - lo.x + 2.0 * m, 2.0, hi.z - lo.z + 2.0 * m))
 
 
-func _build_curve() -> void:
-	_curve.clear_points()
-	_curve.bake_interval = 0.5
-	var per := 2.0 * straight_length + 2.0 * PI * turn_radius
-	var n := 160
-	for i in n + 1: # last point = first point closes the loop
-		_curve.add_point(_stadium_point(per * float(i) / n))
-
+# ---------------------------------------------------------------- generated visuals + collision
 
 func _build_visuals() -> void:
 	var ground := StaticBody3D.new()
@@ -178,32 +173,54 @@ func _build_visuals() -> void:
 	ground.add_child(shape)
 	var sand := MeshInstance3D.new()
 	var plane := PlaneMesh.new()
-	var b := get_bounds()
-	plane.size = Vector2(b.size.x + 40.0, b.size.z + 40.0)
+	var b := _bounds_local
+	plane.size = Vector2(b.size.x + 120.0, b.size.z + 120.0)
 	sand.mesh = plane
+	sand.position = Vector3(b.position.x + b.size.x * 0.5, 0.0, b.position.z + b.size.z * 0.5)
 	sand.material_override = _mat(Color(0.82, 0.72, 0.52))
 	ground.add_child(sand)
 	add_child(ground)
 
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var steps := int(length() / 2.0)
+	var steps := maxi(int(length() / MESH_STEP), 8)
+	var h := track_width * 0.5
+	var road := SurfaceTool.new()
+	road.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var wall := SurfaceTool.new()
+	wall.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for i in steps:
-		var t0 := transform_at(length() * i / steps)
-		var t1 := transform_at(length() * (i + 1) / steps)
-		var h := track_width * 0.5
-		var a := to_local(t0.origin - t0.basis.x * h) + Vector3.UP * 0.02
-		var c := to_local(t0.origin + t0.basis.x * h) + Vector3.UP * 0.02
-		var d := to_local(t1.origin - t1.basis.x * h) + Vector3.UP * 0.02
-		var e := to_local(t1.origin + t1.basis.x * h) + Vector3.UP * 0.02
-		st.set_normal(Vector3.UP)
-		for v in [a, d, c, c, d, e]:
-			st.add_vertex(v)
-	var road := MeshInstance3D.new()
-	road.name = "Road"
-	road.mesh = st.commit()
-	road.material_override = _mat(Color(0.55, 0.5, 0.45))
-	add_child(road)
+		var t0 := _local_t(length() * i / steps)
+		var t1 := _local_t(length() * (i + 1) / steps)
+		_quad(road, t0.origin - t0.basis.x * h, t1.origin - t1.basis.x * h, t0.origin + t0.basis.x * h,
+			t1.origin + t1.basis.x * h, Vector3.UP, 0.02)
+		for side: float in [-1.0, 1.0]:
+			var in0: Vector3 = t0.origin + t0.basis.x * side * h
+			var in1: Vector3 = t1.origin + t1.basis.x * side * h
+			var out0: Vector3 = t0.origin + t0.basis.x * side * (h + wall_thickness)
+			var out1: Vector3 = t1.origin + t1.basis.x * side * (h + wall_thickness)
+			var up := Vector3.UP * wall_height
+			var n: Vector3 = -t0.basis.x * side # faces the road
+			_strip(wall, in0, in1, up, n)
+			_strip(wall, out1, out0, up, -n)
+			_quad(wall, in0 + up, in1 + up, out0 + up, out1 + up, Vector3.UP, 0.0)
+	var road_mi := MeshInstance3D.new()
+	road_mi.name = "Road"
+	road_mi.mesh = road.commit()
+	road_mi.material_override = _mat(Color(0.55, 0.5, 0.45))
+	add_child(road_mi)
+
+	var walls := StaticBody3D.new()
+	walls.name = "Walls"
+	walls.collision_layer = Layers.WALL
+	walls.collision_mask = 0
+	var wall_mesh := wall.commit()
+	var wall_mi := MeshInstance3D.new()
+	wall_mi.mesh = wall_mesh
+	wall_mi.material_override = _mat(Color(0.7, 0.62, 0.55))
+	walls.add_child(wall_mi)
+	var wall_shape := CollisionShape3D.new()
+	wall_shape.shape = wall_mesh.create_trimesh_shape()
+	walls.add_child(wall_shape)
+	add_child(walls)
 
 	var line := MeshInstance3D.new()
 	line.name = "StartLine"
@@ -211,12 +228,37 @@ func _build_visuals() -> void:
 	box.size = Vector3(track_width, 0.05, 1.0)
 	line.mesh = box
 	line.material_override = _mat(Color.WHITE)
-	line.transform = transform_at(0.0)
-	line.position += Vector3.UP * 0.03
+	line.transform = Transform3D(_local_t(0.0).basis, _local_t(0.0).origin + Vector3.UP * 0.04)
 	add_child(line)
+
+
+## Transform on the centre line in this node's local space (-Z = driving direction).
+func _local_t(progress: float) -> Transform3D:
+	var l := length()
+	var p := _curve.sample_baked(fposmod(progress, l))
+	var dir := _curve.sample_baked(fposmod(progress + 1.0, l)) - p
+	dir.y = 0.0
+	if dir.length_squared() < 0.0001:
+		dir = Vector3.FORWARD
+	return Transform3D(Basis.looking_at(dir.normalized(), Vector3.UP), p)
+
+
+func _quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, n: Vector3, lift: float) -> void:
+	# a,b = near/far left; c,d = near/far right (counter-clockwise seen from +Y when n is UP)
+	var up := Vector3.UP * lift
+	st.set_normal(n)
+	for v in [a, b, c, c, b, d]:
+		st.add_vertex(v + up)
+
+
+func _strip(st: SurfaceTool, a: Vector3, b: Vector3, up: Vector3, n: Vector3) -> void:
+	st.set_normal(n)
+	for v in [a, b, a + up, a + up, b, b + up]:
+		st.add_vertex(v)
 
 
 func _mat(c: Color) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = c
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED # WHY: greybox, winding of every face is not worth the bugs
 	return m

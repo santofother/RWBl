@@ -6,7 +6,7 @@ source "$(dirname "$0")/lib.sh"
 echo "Logs: $OUT"
 TEST_SCENE=res://game/common/tests/contract_test.tscn launch_peer contract
 TEST_SCENE=res://game/match/match.tscn launch_peer match --no-human --bots=4 --phase=race --rounds=1 \
-	--phase-time=4 --autotest=3.5 --quit-after=9.5
+	--phase-time=9 --autotest=7.5 --quit-after=25
 wait_peers 40 || { echo "CONTRACT TEST FAILED (peer exit/timeout, see $OUT)"; exit 1; }
 
 fail=0
@@ -15,7 +15,8 @@ assert_log match '^\[Game\] PHASE race 1' || fail=1
 assert_log match '^\[Game\] MATCH FINISHED' || fail=1
 n=$(grep -c '^\[TEST\] CHARIOT ' "$OUT/match.log")
 [ "$n" -eq 4 ] && echo "  ok   4 chariots reported" || { echo "  FAIL expected 4 chariots, got $n"; fail=1; }
-# Grid is just behind the line (progress ~300 of ~316 m); after 3.5 s every bot must be well past it.
+# Grid is just behind the line (progress ~670 of ~675 m); the race has a 3 s frozen countdown, so 4.5 s after GO
+# every bot must be past the line. # FIX(C05, claude): was 3.5 s with no countdown
 while read -r line; do
 	p=${line##*progress=}
 	awk -v p="$p" 'BEGIN { exit !(p > 10 && p < 200) }' && echo "  ok   $line" || { echo "  FAIL $line"; fail=1; }

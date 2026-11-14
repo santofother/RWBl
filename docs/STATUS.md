@@ -13,7 +13,7 @@ DONE (on main, date) · BLOCKED (reason)
 | C02 | Architecture, contracts, stubs, cards C03–C14 | 0 | Claude only · T1 | C01 | DONE 2026-11-13 | c02-architecture |
 | C03 | Lobby: LAN discovery, Steam, ready-up (N2, N3) | 1 | Either (Codex) · T2 | C02 | DONE 2026-11-13 | c03-lobby |
 | C04 | Chariot controller + F2 tuning panel | 1 | Either (Claude) · T1 | C02 | DONE 2026-11-13 | c04-chariot |
-| C05 | Greybox loop track, laps, race camera v1 | 1 | Either (Codex) · T3 | C02 | READY | |
+| C05 | Greybox loop track, laps, race camera v1 | 1 | Either (Codex) · T3 | C02 | DONE 2026-11-14 | c05-track-race |
 | C06 | Bot drivers + headless race harness | 1 | Either (Codex) · T3 | C02 | READY | |
 | C07 | Host-authoritative chariot netcode (N4) | 2 | Either (Claude) · T1 | C03, C04 | READY | |
 | C08 | Build phase + placement validation (N5) | 2 | Either (Codex) · T2 | C05 | TODO | |
