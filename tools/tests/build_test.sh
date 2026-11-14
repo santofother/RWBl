@@ -10,7 +10,8 @@ echo "Logs: $OUT"
 PLACES='oil_slick@60,0,0,0;oil_slick@0,0,0,1;mud_patch@60,1,0,2;column@100,-4,0,0;column@100,0,0,1;column@100,4,0,2'
 TEST_SCENE=res://game/match/match.tscn launch_peer solo --no-human --bots=3 --phase=build --rounds=1 \
 	--phase-time=30 "--test-place=$PLACES" --quit-after=12
-TEST_SCENE=res://game/lobby/main.tscn launch_peer host --host --name=Host --lobby-autostart=2 --no-fill-bots \
+# FIX(C09, claude): Draft now deals real hands (rules.free_build = false); the host validates, so it needs --free-build.
+TEST_SCENE=res://game/lobby/main.tscn launch_peer host --host --name=Host --lobby-autostart=2 --no-fill-bots --free-build \
 	--rounds=1 --phase-time=6 "--discovery-port=$((PORT + 1))" --quit-after=25
 wait_log host '\[Net\] Hosting' 15 || exit 1
 TEST_SCENE=res://game/lobby/main.tscn launch_peer client --join=127.0.0.1 --name=C1 --auto-ready \

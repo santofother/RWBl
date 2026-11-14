@@ -98,6 +98,8 @@ Godot binary: `$GODOT`, default `/Users/santofothergill/Downloads/Godot.app/Cont
   `--phase-time=SEC` (test override for all phase durations).
 - Standalone match (run `res://game/match/match.tscn` directly; tests and F6): `--bots=N`, `--no-human`,
   `--phase=draft|build|race|score`, `--rounds=N`, `--laps=N`, `--phase-time=SEC` (see `docs/ARCHITECTURE.md` §1).
+- Match flow (C09, any scene with a match, read on the host): `--test-totals=slot:points,...` (added to the score
+  totals: tests catch-up dealing and the win score), `--free-build` (Build ignores the draft hands).
 - Netcode (C07, any scene with `ChariotSync`): `--lag-ms=N` (simulated one-way delay on this peer's input /
   snapshot sends), `--loss=PCT` (simulated drop), `--no-predict` (own chariot interpolated like the others),
   `--net-autotest` (test driver for `chariot_net_test`). F3 also shows a net stats label top-right.
