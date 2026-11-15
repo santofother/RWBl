@@ -24,7 +24,7 @@ DONE (on main, date) · BLOCKED (reason)
 | C13 | Camera swing + race camera polish | 3 | Either · T3 | C05, C08 | DONE 2026-11-14 | c13-camera |
 | C14 | HUD + draft cards UI | 3 | Either (Codex) · T3 | C09 | DONE 2026-11-14 | c14-hud |
 | C16 | Match rules v2: no round cap, win at 1000 by finishing 1st, points ×30 | 4 | Either · T3 | C09, C11 | DONE 2026-11-14 | c16-win-rule |
-| C17 | Demolish card (remove a placed item) | 4 | Either · T2 | C08, C10 | REVIEW (needs merge session: approve ItemDef.targets_placed contract change) | c17-demolish |
+| C17 | Demolish card (remove a placed item) | 4 | Either · T2 | C08, C10 | DONE 2026-11-14 | c17-demolish (user OK to land; ItemDef.targets_placed still to approve) |
 | C18 | Score screen v2: vertical stacked bars to the 1000 line | 4 | Either · T2 | C16 | READY | |
 | C19 | Track pieces framework + hairpin, chicane | 4 | Claude pref · T1 | C16, C17 | TODO | |
 | C20 | Track pieces: hills, crest, banked turn | 4 | Claude pref · T2 | C19 | TODO | |
