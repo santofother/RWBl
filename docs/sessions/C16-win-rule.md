@@ -4,7 +4,7 @@ Model: Codex **GPT-6.1 Sol, medium** · or Claude **Sonnet 5.5, medium**
 Depends on: C09
 
 Owns: `rwbl/game/match/**`, `tools/tests/match_test.sh`
-Read: `DESIGN.md` §3 (rounds + winning bullets), §11 Q9 · handoff `C09` · `rwbl/game/match/match.gd`,
+Read: `DESIGN.md` §3 (rounds + winning bullets) · handoff `C09` · `rwbl/game/match/match.gd`,
 `match_tuning.gd` · headers of `rwbl/game/race/race_controller.gd`, `rwbl/game/scoring/scoring.gd`
 
 ## Goal
@@ -18,8 +18,9 @@ their total (after that round's points) is **≥ win_score** (30). Reaching 30 a
 - Remove the round cap: `rounds` leaves MatchTuning / rules (or `rounds = 0` means unlimited and is the default;
   keep `--rounds=N` as a test-only cap so tests still end). Log `[Game] MATCH POINT slot N` the first time a
   slot is ≥ win_score at the start of a round (HUD can show it later).
-- Grand Circus: no final round any more. `is_grand_circus()` returns false until DESIGN Q9 is decided (keep the
-  function so Scoring/HUD keep compiling).
+- Grand Circus is **dropped** (user, 2026-11-14): remove `is_grand_circus()`, `grand_circus_extra_laps`, the
+  extra-lap logic and the `[Game] GRAND CIRCUS` log. Grep the repo first; if another system still calls
+  `is_grand_circus()`, keep it returning false with a `# TODO(C16):` instead of breaking that file.
 - Catch-up dealing keeps working with no round cap (it reads totals, not round numbers; check).
 
 ## Tests

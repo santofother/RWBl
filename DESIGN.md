@@ -36,8 +36,7 @@ Each round has four phases:
 - **Winning:** the win score is 30 points. You only win by **finishing 1st in a race while your total (with
   that round's points) is at or above the win score.** Reaching 30 isn't enough on its own: you have to win
   a round from there, and everyone else can still catch up.
-- The "Grand Circus" (double points, longer track, all items active) was the final round. With no round cap
-  there's no final round: see open question 9.
+- No "Grand Circus" finale (dropped 2026-11-14: with no round cap there's no final round).
 
 ## 4. Chariot driving model
 
@@ -240,8 +239,7 @@ One Steam app for the whole hub, with each game as a mode, is the simplest. Sepa
 7. Cross-game progression (unlocks, currency) in the hub: in scope for v1 or later?
 8. ~~Track pieces (§5.6): who places them?~~ **Decided:** drafted with items and placed in the Build phase,
    one card per player per round (§3, §5.5).
-9. **Grand Circus without a round cap:** drop it, or trigger it differently (e.g. the round after someone
-   first reaches the win score)? Until decided, no round is a Grand Circus.
+9. ~~Grand Circus without a round cap?~~ **Decided:** dropped. Every round scores the same.
 
 ## 12. Risks
 

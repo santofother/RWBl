@@ -54,7 +54,7 @@ DESIGN §8 `Transport` (same signals for ENet and Steam), so there is no extra w
 | `bots/` | C06 | `BotManager`, `BotDriver` | `compute_input(chariot, track, delta)` |
 | `net/` | C07 | `ChariotSync`: input up, snapshots down, interpolation, prediction, `--lag-ms` | §4 Sync |
 | `build/` | C08 | `BuildPhase`: cursor/ghost UI, placement RPC, validation, path check, bot placing | §4 Items |
-| `match/`, `draft/` | C09 | `MatchMode` phase loop, rounds, Grand Circus, dropouts; `Draft` dealing | §1 |
+| `match/`, `draft/` | C09 | `MatchMode` phase loop, rounds (no cap, C16), dropouts; `Draft` dealing | §1 |
 | `items/` | C10 (+ wave 4 item cards) | `Item` base, `ItemDB`, `defs/*.tres`, `tag_table.tres`, item scenes | §4 Items |
 | `scoring/` | C11 | `Scoring`, score screen, anti-grief | `get_totals()` |
 | `combat/` | C12 | chariot-vs-chariot rules, death → respawn, crow | GameEvents kill/self_kill |
