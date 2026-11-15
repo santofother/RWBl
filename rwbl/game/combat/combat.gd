@@ -296,6 +296,8 @@ func _on_phase_changed(phase: int, _round: int) -> void: # NET: every peer
 	elif not _crow_items.is_empty():
 		for uid in _crow_items:
 			var it := _m.items_root.get_node_or_null(NodePath("Item%d" % uid)) if _m else null
+			if _m:
+				_m.build.items().erase(uid) # WHY: BuildPhase.validate() loops its items typed; a freed one errors
 			if it:
 				it.queue_free()
 				GameEvents.item_removed.emit(uid)

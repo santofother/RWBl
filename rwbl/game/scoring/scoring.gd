@@ -4,13 +4,18 @@ extends Node
 ## NET: host listens to GameEvents (chariot_finished, race_over, trap_hit, kill, self_kill, clean_lap, lap_completed,
 ##   chariot_died, chariot_respawned, item_placed, item_removed) and computes at race_over; it broadcasts by RPC, and
 ##   every peer then updates totals and emits GameEvents.round_scored. Clients only read.
-## Public API: match_setup(m), get_totals() -> Dictionary slot -> int, get_round_points() -> Dictionary slot -> int,
+## Finish card (C12, user request): host sends `finish_card` to all when a chariot finishes; FinishScreen shows it.
+## Public API: match_setup(m), provisional_points(slot, place), signal finish_card, get_totals() -> Dictionary slot -> int, get_round_points() -> Dictionary slot -> int,
 ##   get_breakdown() -> Dictionary slot -> {finish, traps, kills, bonus, total}, configure(slots, progress_fn,
 ##   item_progress_fn) (tests), score_round(finish_order).
 ## Logs: `[Score] ROUND r slot:pts ...`, `[Score] GRIEF item uid`.
 # CONTRACT: get_totals() is what MatchMode uses for the win check and catch-up dealing.
 # WHY: anti-grief: an item pays trap points only if some chariot passed it alive without dying to it. That covers
 #   "nobody passes" and "everyone who reached it died to it" (a respawned victim passing later doesn't count).
+
+## all · `slot` crossed the finish line: place, race time, place points, bonus so far (laps, clean laps, kills,
+## traps; end-of-round bonuses come later). FinishScreen shows it for the local player.
+signal finish_card(slot: int, place: int, race_time: float, finish_pts: int, bonus_pts: int)
 
 const TABLE_DEFAULT := preload("res://game/scoring/default_score_table.tres")
 
@@ -57,6 +62,11 @@ func match_setup(m: MatchMode) -> void:
 	var screen := get_node_or_null(^"ScoreScreen") as ScoreScreen
 	if screen:
 		screen.match_setup(m, self)
+	var card := FinishScreen.new() # C12 (user request): personal finish card
+	card.name = "FinishScreen"
+	add_child(card)
+	card.match_setup(m, self)
+	GameEvents.chariot_finished.connect(_on_finished_card)
 
 
 ## Wires the score state to its inputs. `progress_fn(slot) -> float`, `item_progress_fn(pos) -> float`.
@@ -135,6 +145,30 @@ func score_round(finish_order: Array) -> void: # NET: host only
 		pts[s] = int(bd[s]["total"])
 		tot[s] = int(_totals.get(s, 0)) + int(pts[s])
 	_rpc_scored.rpc(pts, tot, bd)
+
+
+## Host: provisional points of `slot` right now (place points + laps, clean laps, kills, traps, self-kills).
+func provisional_points(slot: int, place: int) -> Array: # [finish, bonus]. NET: host
+	var traps := 0
+	for uid: int in _hits:
+		if _items.has(uid) and int(_items[uid]["owner"]) == slot:
+			traps += (_hits[uid] as Array).size() * table.trap_hit
+	var bonus := mini(traps, table.trap_cap) + int(_kills.get(slot, 0)) * table.kill \
+		+ int(_laps.get(slot, 0)) * table.lap + int(_clean.get(slot, 0)) * table.clean_lap \
+		+ int(_self_kills.get(slot, 0)) * table.self_kill
+	return [table.finish_points(place), bonus]
+
+
+func _on_finished_card(slot: int, place: int, t: float) -> void: # NET: host
+	if multiplayer.is_server():
+		var p := provisional_points(slot, place)
+		_rpc_finish_card.rpc(slot, place, t, int(p[0]), int(p[1]))
+
+
+@rpc("authority", "call_local", "reliable")
+func _rpc_finish_card(slot: int, place: int, t: float, fin: int, bonus: int) -> void: # NET: every peer
+	print("[Score] CARD %d place=%d finish=%d bonus=%d" % [slot, place, fin, bonus])
+	finish_card.emit(slot, place, t, fin, bonus)
 
 
 @rpc("authority", "call_local", "reliable")
