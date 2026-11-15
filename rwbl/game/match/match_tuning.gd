@@ -8,10 +8,9 @@ extends Resource
 # CONTRACT: tuning resources use @export_range so TuningPanel can build sliders.
 
 @export_group("Rounds")
-@export_range(1, 12) var rounds := 6 # TUNE: rounds per match (DESIGN: 6-8)
+@export_range(0, 50) var rounds := 0 # TUNE: 0 = rounds repeat until someone wins; N = test cap
 @export_range(1, 5) var laps := 1 # TUNE: laps per race
-@export_range(5, 100) var win_score := 30 # TUNE: first to this many points wins at the end of a Score phase
-@export_range(0, 3) var grand_circus_extra_laps := 1 # TUNE: extra laps in the final round
+@export_range(100, 5000, 50) var win_score := 1000 # TUNE: finish 1st with a total >= this to win
 @export_group("Phase seconds")
 @export_range(3.0, 60.0) var draft_time := 10.0 # TUNE: s, ends early once everyone picked
 @export_range(5.0, 90.0) var build_time := 25.0 # TUNE: s, ends early once everyone placed
@@ -31,8 +30,7 @@ extends Resource
 ## The rule fields as a MatchMode rules dict (keys of the rules CONTRACT).
 func to_rules() -> Dictionary:
 	return {"rounds": rounds, "laps": laps, "win_score": win_score, "draft_time": draft_time,
-		"build_time": build_time, "race_time": race_time, "score_time": score_time,
-		"grand_circus_extra_laps": grand_circus_extra_laps}
+		"build_time": build_time, "race_time": race_time, "score_time": score_time}
 
 
 ## Draw weight for an ItemDef.Rarity value.

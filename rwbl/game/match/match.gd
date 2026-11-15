@@ -1,24 +1,24 @@
 class_name MatchMode
 extends GameMode
-## RWBL's GameMode: one match = 6-8 rounds of Draft -> Build -> Race -> Score (DESIGN §3, §9). Owner: C09.
+## RWBL's GameMode: rounds of Draft -> Build -> Race -> Score until someone wins (DESIGN §3, §9). Owner: C09, C16.
 ## Host runs the phase loop: each phase ends on its timer or early on `GameEvents.phase_end_requested`. After
-## SCORE: someone >= `win_score` or the last round -> results. The last round is the Grand Circus (+laps; Scoring
-## doubles its own points). A client that leaves mid-match becomes a bot on every peer (`roster_changed`).
+## SCORE: the race winner (finished 1st) who already had >= `win_score` BEFORE that race wins -> results. Reaching
+## `win_score` by that very race, or being over it without finishing 1st, only means match point. `rounds` 0 = unlimited (default); `--rounds=N` is a test cap. A client that leaves mid-match becomes a bot on every peer (`roster_changed`).
 ## Numbers: MatchTuning (`match/default_tuning.tres`, F2 "Match"); the `rules` dict overrides them per match.
 ## Scene: match.tscn. Its children are the match systems, fixed names (see CONTRACT below). Each system has
 ## `match_setup(m: MatchMode)`, called in SYSTEMS order on every peer from setup(); systems then react to
 ## GameEvents.phase_changed. Systems reach each other through the typed vars below (e.g. `m.track`).
 ## NET: setup() on every peer; start() and the phase loop on the host; phases are broadcast by RPC.
 ## Standalone (scene run directly, tests): CLI `--bots=N` `--no-human` `--phase=draft|build|race|score`
-##   `--rounds=N` `--laps=N` `--phase-time=SEC` `--autotest=SEC` `--quit-after=SEC`. Offline = host.
+##   `--rounds=N` `--laps=N` `--phase-time=SEC` `--race-time=SEC` `--autotest=SEC` `--quit-after=SEC`. Offline = host.
 ## Any scene (read in setup, host): `--free-build` (rules.free_build = true: Build ignores the draft, also implied
 ##   by C08's `--test-place`), `--test-totals=slot:points,...` (added to the Scoring totals; tests catch-up + win).
 ## Public API: players, rules, phase, round_index, setup(), start(), local_slot(), slot_of_peer(peer),
-##   get_player(slot), phase_time_left(), is_grand_circus(), totals(), tuning, signal finished (GameMode).
+##   get_player(slot), phase_time_left(), match_point_slots(), totals(), tuning, signal finished (GameMode).
 # CONTRACT: child node names Track, Items, Chariots, ChariotSync, Race, Draft, Build, Scoring, Combat, Bots,
 #   Cameras, Hud. The match node is at the same path on every peer (RPCs depend on it).
 # CONTRACT: rules keys: rounds, laps, win_score, draft_time, build_time, race_time, score_time, start_phase.
-#   C09 adds: free_build (C08 reads it), grand_circus_extra_laps. `laps` is raised on every peer in the final round.
+#   C09 adds: free_build (C08 reads it). C16: `rounds` 0 = no cap; no Grand Circus.
 
 const SYSTEMS: Array[StringName] = [&"Track", &"ChariotSync", &"Race", &"Draft", &"Build", &"Scoring",
 	&"Combat", &"Bots", &"Cameras", &"Hud"]
@@ -55,6 +55,8 @@ var round_index := 0
 var phase_end_time := 0.0
 
 var _base_laps := 1
+var _pre_race_totals: Dictionary = {} # totals when the current race started (every peer)
+var _match_point_logged: Array[int] = []
 var _end_requested := Phase.NONE # NET: host. Handled in _physics_process (never inside a phase_changed handler).
 
 
@@ -119,10 +121,24 @@ func phase_time_left() -> float:
 	return maxf(0.0, phase_end_time - NetClock.now())
 
 
-## True in the final "Grand Circus" round (double points, +laps). Never in a 1-round match (tests, quick games).
-func is_grand_circus() -> bool:
-	var n := int(rules.get("rounds", 6))
-	return n > 1 and round_index == n
+## The slot that wins the match after a race, or -1: the first finisher, if its total BEFORE the race was >= `win_score`.
+## `finish_order` = finishers only, 1st first (nobody finished -> -1).
+static func winner_slot(finish_order: Array, totals_by_slot: Dictionary, win_score: int) -> int:
+	if finish_order.is_empty():
+		return -1
+	var first := int(finish_order[0])
+	return first if int(totals_by_slot.get(first, 0)) >= win_score else -1
+
+
+## Slots whose total is >= `win_score` (they win by finishing 1st). Same on every peer once Scoring has synced.
+func match_point_slots() -> Array[int]:
+	var out: Array[int] = []
+	var t := totals()
+	for s: int in t:
+		if int(t[s]) >= int(rules["win_score"]):
+			out.append(s)
+	out.sort()
+	return out
 
 
 ## slot -> total points: Scoring's totals plus `--test-totals`. What catch-up dealing and the win check use.
@@ -155,15 +171,14 @@ func _advance() -> void: # NET: host
 		Phase.BUILD: _enter_phase(Phase.RACE, round_index)
 		Phase.RACE: _enter_phase(Phase.SCORE, round_index)
 		Phase.SCORE:
-			var t := totals()
-			var best := -1
-			for s: int in t:
-				if int(t[s]) >= int(rules["win_score"]) and (best < 0 or int(t[s]) > int(t[best])):
-					best = s
-			if best >= 0:
-				print("[Game] WIN slot %d score %d (win_score %d)" % [best, int(t[best]), int(rules["win_score"])])
+			# WHY (C16): winning = finish 1st AND total >= win_score. Nobody finished -> no winner this round.
+			# WHY (C16): the check uses the totals from BEFORE this race (match point), so 900 + a race win -> 1100
+			# keeps going and the next 1st wins. The score shown is the total after this race.
+			var winner := winner_slot(race.finish_order(), _pre_race_totals, int(rules["win_score"]))
+			if winner >= 0:
+				print("[Game] WIN slot %d score %d" % [winner, int(totals().get(winner, 0))])
 				_finish()
-			elif round_index >= int(rules["rounds"]):
+			elif int(rules["rounds"]) > 0 and round_index >= int(rules["rounds"]):
 				_finish()
 			else:
 				_enter_phase(Phase.DRAFT, round_index + 1)
@@ -185,10 +200,14 @@ func _rpc_phase(p: int, r: int, end_time: float) -> void: # NET: every peer
 	round_index = r
 	phase_end_time = end_time
 	_end_requested = Phase.NONE
-	rules["laps"] = _base_laps + (int(rules.get("grand_circus_extra_laps", 1)) if is_grand_circus() else 0)
 	print("[Game] PHASE %s %d" % [Phase.name_of(p), r])
-	if p == Phase.DRAFT and is_grand_circus():
-		print("[Game] GRAND CIRCUS round %d laps %d" % [r, int(rules["laps"])])
+	if p == Phase.RACE:
+		_pre_race_totals = totals()
+	if p == Phase.DRAFT:
+		for s in match_point_slots():
+			if not _match_point_logged.has(s):
+				_match_point_logged.append(s)
+				print("[Game] MATCH POINT slot %d" % s)
 	GameEvents.phase_changed.emit(p, r)
 
 
@@ -275,6 +294,8 @@ func _standalone() -> void:
 	if a.has("phase-time"):
 		for k in ["draft_time", "build_time", "race_time", "score_time"]:
 			r[k] = float(a["phase-time"])
+	if a.has("race-time"): # C16: tests that need a race to finish while the other phases stay short
+		r["race_time"] = float(a["race-time"])
 	setup(ps, r)
 	start()
 	var t := String(a.get("autotest", ""))

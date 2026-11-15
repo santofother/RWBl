@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# C09: match flow. (1) standalone 5 bots, 6 rounds -> 6 x draft/build/race/score in order, 3 cards dealt and 1 kept
-# per bot per round, Grand Circus in round 6, MATCH FINISHED with 5 results.
-# (2) --test-totals: round 2 deals the last place a best-rarity card and the leader only commons; (3) a total >= 30
-# ends the match after round 1. (4) lobby host + client: same phase sequence; client killed mid-match -> its slot
+# C09: match flow. (1) standalone 5 bots, --rounds=6 test cap -> 6 x draft/build/race/score in order, 3 cards dealt
+# and 1 kept per bot per round, MATCH FINISHED with 5 results.
+# (2) --test-totals: round 2 deals the last place a best-rarity card and the leader only commons.
+# C16 win rule: (3) everyone at 1000 -> the 1st finisher of race 1 wins; slot 0 alone at 1000 -> WIN only if it
+# finishes 1st; (5) no --rounds: the match is still running in round 7. Unit: match_rules_test. (4) lobby host + client: same phase sequence; client killed mid-match -> its slot
 # becomes a bot and the match still finishes.
 set -u
 source "$(dirname "$0")/lib.sh"
@@ -11,7 +12,13 @@ M=res://game/match/match.tscn
 TEST_SCENE=$M launch_peer full --no-human --bots=5 --rounds=6 --phase-time=2 --quit-after=80
 TEST_SCENE=$M launch_peer catchup --no-human --bots=5 --rounds=3 --phase-time=1 \
 	--test-totals=0:20,1:0,2:5,3:6,4:7 --quit-after=30
-TEST_SCENE=$M launch_peer win --no-human --bots=5 --rounds=6 --phase-time=1 --test-totals=3:30,1:4 --quit-after=30
+# C16: a real race has to finish for a win, so the race gets 60 s while the other phases stay at 1 s.
+TEST_SCENE=$M launch_peer win --no-human --bots=5 --rounds=6 --phase-time=1 --race-time=60 --laps=1 \
+	--test-totals=0:1000,1:1000,2:1000,3:1000,4:1000 --quit-after=100
+TEST_SCENE=$M launch_peer one --no-human --bots=5 --rounds=2 --phase-time=1 --race-time=60 --laps=1 \
+	--test-totals=0:1000 --quit-after=200
+TEST_SCENE=$M launch_peer nocap --no-human --bots=5 --phase-time=1 --quit-after=60
+TEST_SCENE=res://game/match/tests/match_rules_test.tscn launch_peer rules
 L=res://game/lobby/main.tscn
 TEST_SCENE=$L launch_peer host --host --name=Host --lobby-autostart=2 --rounds=2 --phase-time=3 \
 	"--discovery-port=$((PORT + 1))" --quit-after=90
@@ -21,7 +28,7 @@ client_pid=${pids[$((${#pids[@]} - 1))]}
 fail=0
 wait_log host '\[Game\] PHASE draft 2' 60 || fail=1
 kill "$client_pid" 2>/dev/null
-for p in full catchup win host; do wait_log "$p" '\[Game\] MATCH FINISHED' 80 || fail=1; done
+for p in full catchup win one host; do wait_log "$p" '\[Game\] MATCH FINISHED' 160 || fail=1; done
 sleep 0.5; cleanup_peers; sleep 0.5
 
 # (1) full match
@@ -32,7 +39,7 @@ n_deal=$(grep -cE '^\[Draft\] DEAL [0-4] [a-z_]+,[a-z_]+,[a-z_]+ ' "$OUT/full.lo
 n_keep=$(grep -cE '^\[Draft\] KEEP [0-4] [a-z_]+' "$OUT/full.log")
 [ "$n_deal" = 30 ] && [ "$n_keep" = 30 ] && echo "  ok   30 deals of 3, 30 keeps of 1" \
 	|| { echo "  FAIL deals=$n_deal keeps=$n_keep (want 30/30)"; fail=1; }
-assert_log full '^\[Game\] GRAND CIRCUS round 6 laps 2' || fail=1
+grep -q 'GRAND CIRCUS' "$OUT/full.log" && { echo "  FAIL Grand Circus still exists"; fail=1; }
 [ "$(grep -c '^\[Game\] RESULT ' "$OUT/full.log")" = 5 ] && echo "  ok   5 results" || { echo "  FAIL results"; fail=1; }
 # Build uses the kept card (free_build off): every bot places exactly its 1 card.
 [ "$(grep -c '^\[Build\] BOT [0-4] placed 1$' "$OUT/full.log")" -ge 25 ] && echo "  ok   bots placed their kept card" \
@@ -51,12 +58,24 @@ for r in 2 3; do
 		&& echo "  ok   round $r: leader only commons" || { echo "  FAIL round $r leader: $d"; fail=1; }
 done
 
-# (3) early win
-# FIX(C11, claude): real scoring now adds round points on top of --test-totals, so the winner has >= 30.
-assert_log win '^\[Game\] WIN slot 3 score (3[0-9]|[4-9][0-9])' || fail=1
-assert_log win '^\[Game\] RESULT 3 .* score=(3[0-9]|[4-9][0-9]) place=1' || fail=1
-grep -q '^\[Game\] PHASE draft 2' "$OUT/win.log" && { echo "  FAIL match went on after 30 points"; fail=1; }
-[ "$(grep -c '^\[Game\] RESULT ' "$OUT/win.log")" = 5 ] && echo "  ok   30 points ends after round 1" || fail=1
+# (3) C16: all at 1000, first finisher of race 1 wins and the match ends after round 1.
+first=$(sed -n 's/^\[Race\] FINISH \([0-9]\) 1 .*/\1/p' "$OUT/win.log" | head -1)
+[ -n "$first" ] && assert_log win "^\[Game\] WIN slot $first score (1[0-9]{3})" || { echo "  FAIL no WIN for first finisher '$first'"; fail=1; }
+grep -q '^\[Game\] PHASE draft 2' "$OUT/win.log" && { echo "  FAIL match went on after the win"; fail=1; }
+assert_log win '^\[Game\] MATCH POINT slot 0' || fail=1
+# slot 0 alone at 1000: WIN iff it was 1st in race 1 (else the match goes on to round 2, capped by --rounds=2).
+first1=$(sed -n 's/^\[Race\] FINISH \([0-9]\) 1 .*/\1/p' "$OUT/one.log" | head -1)
+if [ "$first1" = 0 ]; then
+	assert_log one '^\[Game\] WIN slot 0 ' || fail=1
+	grep -q '^\[Game\] PHASE draft 2' "$OUT/one.log" && { echo "  FAIL went on after slot 0 won"; fail=1; }
+else
+	grep -q '^\[Game\] WIN' "$OUT/one.log" && { echo "  FAIL WIN although slot 0 was not 1st ($first1)"; fail=1; } || echo "  ok   at 1000 but not 1st -> no win"
+	assert_log one '^\[Game\] PHASE draft 2' || fail=1
+fi
+# (5) no round cap
+assert_log nocap '^\[Game\] PHASE draft 7' || fail=1
+grep -q 'MATCH FINISHED' "$OUT/nocap.log" && { echo "  FAIL uncapped match finished"; fail=1; }
+assert_log rules '^\[TEST\] MATCH RULES PASSED' || fail=1
 
 # (4) host + client, client dropout
 hseq=$(grep -E '^\[Game\] PHASE ' "$OUT/host.log" | awk '{print $3 $4}' | tr '\n' ' ')

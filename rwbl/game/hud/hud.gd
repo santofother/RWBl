@@ -408,7 +408,15 @@ func _process(delta: float) -> void:
 		hide_all()
 		return
 	var left := _m.phase_time_left()
-	show_phase("Round %d/%d · %s" % [_m.round_index, int(_m.rules.get("rounds", 0)), Phase.name_of(phase).capitalize()], left)
+	var title := "Round %d · %s" % [_m.round_index, Phase.name_of(phase).capitalize()]
+	var mp := _m.match_point_slots()
+	if not mp.is_empty():
+		var names: Array[String] = []
+		for s in mp:
+			var pl := _m.get_player(s)
+			names.append(pl.name if pl else str(s))
+		title += " · MATCH POINT: " + ", ".join(names)
+	show_phase(title, left)
 	var slot := _m.local_slot()
 	match phase:
 		Phase.DRAFT:

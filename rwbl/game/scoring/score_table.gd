@@ -7,21 +7,21 @@ extends Resource
 # CONTRACT: tuning resources use @export_range so TuningPanel can build sliders.
 
 @export_group("Finish")
-@export_range(-5, 20) var finish_1st := 5 # TUNE
-@export_range(-5, 20) var finish_2nd := 3 # TUNE
-@export_range(-5, 20) var finish_3rd := 2 # TUNE
-@export_range(-5, 20) var finish_4th := 1 # TUNE
-@export_range(-5, 20) var finish_5th := 0 # TUNE
+@export_range(-100, 500, 5) var finish_1st := 150 # TUNE
+@export_range(-100, 500, 5) var finish_2nd := 100 # TUNE
+@export_range(-100, 500, 5) var finish_3rd := 70 # TUNE
+@export_range(-100, 500, 5) var finish_4th := 40 # TUNE
+@export_range(-100, 500, 5) var finish_5th := 0 # TUNE
 @export_group("Traps and combat")
-@export_range(0, 5) var trap_hit := 1 # TUNE: your item hit another player
-@export_range(0, 10) var trap_cap := 3 # TUNE: max trap points per round
-@export_range(0, 10) var kill := 2 # TUNE: per kill (spear, wheel, ram)
-@export_range(-10, 0) var self_kill := -1 # TUNE: died to your own trap
+@export_range(0, 200, 5) var trap_hit := 30 # TUNE: your item hit another player
+@export_range(0, 500, 5) var trap_cap := 90 # TUNE: max trap points per round
+@export_range(0, 500, 5) var kill := 60 # TUNE: per kill (spear, wheel, ram)
+@export_range(-200, 0, 5) var self_kill := -30 # TUNE: died to your own trap
 @export_group("Laps and bonuses")
-@export_range(0, 5) var lap := 1 # TUNE: per lap completed
-@export_range(0, 5) var clean_lap := 1 # TUNE
-@export_range(0, 5) var mercy := 1 # TUNE: last to finish
-@export_range(0, 10) var fewest_deaths := 2 # TUNE: fewest deaths this round (ties all get it)
+@export_range(0, 200, 5) var lap := 25 # TUNE: per lap completed
+@export_range(0, 200, 5) var clean_lap := 25 # TUNE
+@export_range(0, 200, 5) var mercy := 25 # TUNE: last to finish
+@export_range(0, 500, 5) var fewest_deaths := 50 # TUNE: fewest deaths this round (ties all get it)
 @export_group("Anti-grief")
 ## Items that are help, not traps: hitting a rival with them pays nothing.
 @export var non_trap_items: Array[StringName] = [&"speed_pad"] # TUNE

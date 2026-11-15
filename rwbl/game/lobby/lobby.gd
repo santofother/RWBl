@@ -13,7 +13,7 @@ const RESULTS_SECONDS := 5.0
 var _discovery: LanDiscovery
 var _members: Array[Dictionary] = []
 var _fill_bots := true
-var _rounds := 6
+var _rounds := 0
 var _match: GameMode
 var _loading := false
 var _generation := 0
@@ -60,7 +60,7 @@ func _ready() -> void:
 	NetworkManager.status_changed.connect(_set_status)
 	SteamManager.status_changed.connect(_set_status)
 	SteamManager.lobby_list_updated.connect(_on_steam_list)
-	_rounds = clampi(int(NetworkManager.args.get("rounds", 6)), 1, 99)
+	_rounds = clampi(int(NetworkManager.args.get("rounds", 0)), 0, 99) # FIX(C16, claude): 0 = until someone wins
 	_fill_bots = not NetworkManager.args.has("no-fill-bots")
 	_set_status("Steam: " + SteamManager.init_message)
 	_listen()
@@ -566,9 +566,9 @@ func _build_ui() -> void:
 	_room.add_child(_fill_check)
 	var options := HBoxContainer.new()
 	_room.add_child(options)
-	_label(options, "Rounds: ")
+	_label(options, "Max rounds (0 = until win): ")
 	_rounds_spin = SpinBox.new()
-	_rounds_spin.min_value = 1
+	_rounds_spin.min_value = 0 # FIX(C16, claude): 0 = until someone wins
 	_rounds_spin.max_value = 99
 	_rounds_spin.value_changed.connect(_options_changed)
 	options.add_child(_rounds_spin)
