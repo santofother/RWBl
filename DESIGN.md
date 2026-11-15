@@ -30,12 +30,13 @@ Each round has four phases:
 | Draft | UI | ~10s | Each player is dealt 3 random cards (items and track pieces mixed) and keeps 1 |
 | Build | Top-down | ~25s | Each player places their one card (item or track piece) on the track, all at once |
 | Race | Third person behind chariot | ~60-90s | 1-2 laps |
-| Score | UI | ~10s | Points, replays of highlights, next round |
+| Score | UI | ~10s | Animated vertical bar chart: each player's bar climbs by this round's points toward the win line, overtakes re-sort, next round |
 
 - **No round cap.** Rounds repeat until someone wins.
-- **Winning:** the win score is 30 points. You only win by **finishing 1st in a race while your total (with
-  that round's points) is at or above the win score.** Reaching 30 isn't enough on its own: you have to win
-  a round from there, and everyone else can still catch up.
+- **Winning:** the win score is **1000 points**. You only win by **finishing 1st in a race while your total
+  (with that round's points) is at or above the win score.** Reaching 1000 isn't enough on its own: e.g. 900 →
+  win a race → 1100, and the match goes on until you win another race, or someone else at 1000+ wins one.
+  Everyone else can still catch up. Players at 1000+ show a "MATCH POINT" tag.
 - No "Grand Circus" finale (dropped 2026-11-14: with no round cap there's no final round).
 
 ## 4. Chariot driving model
@@ -128,15 +129,17 @@ changes every round. Pieces stay for the rest of the match, like items.
 ### Per-round
 | Event | Points |
 |---|---|
-| Finish 1st / 2nd / 3rd / 4th / 5th | 5 / 3 / 2 / 1 / 0 |
-| Your trap hits another player | +1 each (max 3 per round) |
-| Each lap completed | +1 |
-| Fewest deaths this round (ties all get it) | +2 |
-| Each kill (spear, wheel or ram; not your trap) | +2 |
-| Die to your own trap | -1 |
-| Clean lap (no collisions) | +1 |
-| Last to finish | +1 mercy point |
+| Finish 1st / 2nd / 3rd / 4th / 5th | 150 / 100 / 70 / 40 / 0 |
+| Your trap hits another player | +30 each (max 90 per round) |
+| Each lap completed | +25 |
+| Fewest deaths this round (ties all get it) | +50 |
+| Each kill (spear, wheel or ram; not your trap) | +60 |
+| Die to your own trap | -30 |
+| Clean lap (no collisions) | +25 |
+| Last to finish | +25 mercy points |
 | **Nobody passes your item, or everyone dies to it** | 0 for that item |
+
+Scale (2026-11-14): a round winner earns ~250–300, so someone reaches match point in ~4–5 rounds.
 
 The last row is the anti-grief rule. A trap that is impossible to pass pays nothing, which encourages tricky but fair traps.
 

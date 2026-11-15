@@ -137,7 +137,9 @@ Each item becomes its own small T3 card from the C10 template, so many run in pa
 between Claude and Codex.
 
 **Track pieces** (DESIGN §5.6), in order, each depends on the one before. Pieces are draft cards like items
-and are placed in the Build phase (one card per player per round). C15 writes the full cards:
+and are placed in the Build phase (one card per player per round). Cards written 2026-11-14 as **C19 / C20 / C21**
+(T1/T2/T3 below). Also in wave 4: **C16** match rules v2 (win at 1000, points ×30), **C17** Demolish, **C18** score bar
+animation.
 | Card | Title | Suggested | Tier | Notes |
 |---|---|---|---|---|
 | T1 | Track pieces framework: piece cards in the draft, placing a piece in Build (pick a road section, ghost, host validation), splice it into the centre line, rebuild road/walls/checkpoints, sharp turn + chicane | Claude | T1 | Items already on a replaced section must move or be refunded; bots, no-build zone and the C08 path check follow the new shape |
