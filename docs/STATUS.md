@@ -18,9 +18,9 @@ DONE (on main, date) · BLOCKED (reason)
 | C07 | Host-authoritative chariot netcode (N4) | 2 | Either (Claude) · T1 | C03, C04 | DONE 2026-11-14 | c07-netcode |
 | C08 | Build phase + placement validation (N5) | 2 | Either (Codex) · T2 | C05 | DONE 2026-11-14 | c08-build-phase |
 | C09 | Match flow: draft/build/race/score rounds | 2 | Either (Codex) · T2 | C05, C06 | DONE 2026-11-14 | c09-match-flow |
-| C10 | Item framework + first 8 items | 2 | Either · T2 | C04, C05 | READY | |
-| C11 | Scoring + score screen | 3 | Either (Codex) · T3 | C09, C10 | TODO | |
-| C12 | Damage, wheels, respawn, crow | 3 | Either (Claude) · T2 | C07, C10 | TODO | |
+| C10 | Item framework + first 8 items | 2 | Either · T2 | C04, C05 | DONE 2026-11-14 | c10-items |
+| C11 | Scoring + score screen | 3 | Either (Codex) · T3 | C09, C10 | READY | |
+| C12 | Damage, wheels, respawn, crow | 3 | Either (Claude) · T2 | C07, C10 | READY | |
 | C13 | Camera swing + race camera polish | 3 | Either · T3 | C05, C08 | READY | |
 | C14 | HUD + draft cards UI | 3 | Either (Codex) · T3 | C09 | DONE 2026-11-14 | c14-hud |
 | P1 | Playtest 1 (user + friends) | — | user | wave 3 | TODO | |
