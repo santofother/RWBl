@@ -19,6 +19,9 @@ signal roster_changed()
 signal item_placed(uid: int, item_id: StringName, owner_slot: int, xform: Transform3D)
 ## all · BuildPhase (C08) or the item itself. An item was removed (destroyed, match reset).
 signal item_removed(uid: int)
+## all · Track (C19). The centre line changed (a track piece was spliced in or removed). Road, walls,
+## checkpoints and bounds are already rebuilt; anything caching the curve or progress values re-reads it.
+signal track_changed()
 
 # ---------------------------------------------------------------- race
 ## host · RaceController (C05). `slot` finished `lap` (1-based). `clean` = no collisions during that lap.

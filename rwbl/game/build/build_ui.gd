@@ -5,6 +5,9 @@ extends CanvasLayer
 ## C14 restyles it later (hand + toasts). Created by BuildPhase in match_setup().
 ## Targeting cards (Demolish, C17): no ghost; a red box highlights the placed item under the mouse, LMB asks
 ## the host to remove it (BuildPhase.request_demolish). Nothing under the mouse = nothing happens.
+## Track pieces (C19): the ghost is a translucent road outline that snaps along the centre line (centred on the
+## mouse), R (or Q/E) flips it left/right, LMB asks the host to splice it (BuildPhase.request_piece). Demolish
+## also highlights a placed piece's road.
 ## NET: local only. The host's answer (place_result) is what counts; the colour is only a preview.
 ## Public API: setup(m, build), `selected` (item id or &"").
 
@@ -27,6 +30,8 @@ var _last_key := ""
 var _last_code := -1
 var _hand_key := ""
 var _target_uid := -1 # Demolish: item under the mouse, or -1
+var _flip := false # track piece mirrored to the left
+var _piece_start := 0.0 # track piece: start progress under the mouse
 
 
 ## Wire to the match. Called once by BuildPhase.
@@ -67,7 +72,7 @@ func _build_widgets() -> void:
 		_build.request_done())
 	box.add_child(done)
 	var hint := Label.new()
-	hint.text = "Click an item, then:\nLMB place · RMB cancel\nDemolish: click a placed item\nQ / E rotate · wheel zoom\nWASD / middle-drag pan"
+	hint.text = "Click an item, then:\nLMB place · RMB cancel\nDemolish: click a placed item\nQ / E rotate · R flip a track piece\nwheel zoom · WASD / middle-drag pan"
 	hint.modulate = Color(1, 1, 1, 0.7)
 	box.add_child(hint)
 	_reason = Label.new()
@@ -100,10 +105,13 @@ func _select(id: StringName) -> void:
 	_last_key = ""
 	_reason.text = ""
 	_target_uid = -1
+	_flip = false
 	if _ghost:
 		_ghost.visible = false
 		var d := ItemDB.get_def(id)
-		if d and not BuildPhase.is_targeting(d):
+		if d and d.is_piece():
+			_ghost.mesh = null # built per position in _update_piece()
+		elif d and not BuildPhase.is_targeting(d):
 			var box := BoxMesh.new()
 			var h := 1.2 if d.blocks_path else 0.15
 			box.size = Vector3(d.footprint.x, h, d.footprint.y)
@@ -155,6 +163,9 @@ func _process(delta: float) -> void:
 	if BuildPhase.is_targeting(ItemDB.get_def(selected)):
 		_update_target(pos)
 		return
+	if ItemDB.get_def(selected) and ItemDB.get_def(selected).is_piece():
+		_update_piece(pos)
+		return
 	var s := _build.tuning.snap
 	pos.x = snappedf(pos.x, s)
 	pos.z = snappedf(pos.z, s)
@@ -178,9 +189,50 @@ func _process(delta: float) -> void:
 		_reason.text = "" if ok else PlaceResult.describe(_last_code)
 
 
+func _update_piece(pos: Vector3) -> void:
+	var track := _m.track
+	var d := ItemDB.get_def(selected)
+	_piece_start = snappedf(track.progress_at(pos) - d.piece_length * 0.5, _build.tuning.snap)
+	var key := "%s %.2f %s" % [selected, _piece_start, _flip]
+	if key == _last_key:
+		return
+	_last_key = key
+	_last_code = _build.validate_piece(_m.local_slot(), selected, _piece_start, _flip)
+	var ok := _last_code == PlaceResult.OK
+	_ghost.mesh = _ribbon(track.piece_world_points(selected, _piece_start, _flip), track.track_width)
+	_ghost.global_transform = Transform3D()
+	_ghost_mat.albedo_color = Color(0.2, 1.0, 0.3, 0.45) if ok else Color(1.0, 0.2, 0.2, 0.45)
+	_ghost.visible = true
+	if ok:
+		_reason.text = "R flips it"
+	elif _last_code in [PlaceResult.NO_BUILD_ZONE, PlaceResult.OFF_TRACK, PlaceResult.TOO_CLOSE, PlaceResult.BLOCKS_PATH]:
+		_reason.text = Track.splice_text(_build.last_splice_code)
+	else:
+		_reason.text = PlaceResult.describe(_last_code)
+
+
+## Flat translucent road strip `width` m wide along world points `pts`, lifted a little above the road.
+static func _ribbon(pts: PackedVector3Array, width: float) -> ArrayMesh:
+	if pts.size() < 2:
+		return null
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
+	st.set_normal(Vector3.UP)
+	for i in pts.size():
+		var a := pts[maxi(i - 1, 0)]
+		var b := pts[mini(i + 1, pts.size() - 1)]
+		var right := (b - a).cross(Vector3.UP).normalized() * width * 0.5
+		var up := Vector3.UP * 0.25
+		st.add_vertex(pts[i] - right + up)
+		st.add_vertex(pts[i] + right + up)
+	return st.commit()
+
+
 func _update_target(pos: Vector3) -> void:
 	_target_uid = _build.item_at(pos)
 	var it: Item = _build.items().get(_target_uid)
+	if _target_uid < 0 and _target_piece(pos):
+		return
 	if it == null or not is_instance_valid(it) or it.def == null:
 		_target_uid = -1
 		_ghost.visible = false
@@ -199,6 +251,31 @@ func _update_target(pos: Vector3) -> void:
 	_reason.text = "Click to remove %s" % name_txt
 
 
+## Demolish over a track piece's road: highlight the whole piece. False if there is none under `pos`.
+func _target_piece(pos: Vector3) -> bool:
+	var track := _m.track
+	var uid := track.piece_at(pos)
+	if uid < 0:
+		return false
+	for e: Dictionary in track.pieces():
+		if int(e["uid"]) != uid:
+			continue
+		var pts := PackedVector3Array()
+		var p := float(e["start"])
+		while p <= float(e["end"]):
+			pts.append(track.point_at(p))
+			p += 1.0
+		_target_uid = uid
+		_ghost.mesh = _ribbon(pts, track.track_width + 0.6)
+		_ghost.global_transform = Transform3D()
+		_ghost_mat.albedo_color = Color(1.0, 0.15, 0.1, 0.5)
+		_ghost.visible = true
+		var d := ItemDB.get_def(e["id"])
+		_reason.text = "Click to remove %s (restores the road)" % (d.display_name if d else String(e["id"]))
+		return true
+	return false
+
+
 func _ground_point(cam: Camera3D, mouse: Vector2) -> Variant:
 	var from := cam.project_ray_origin(mouse)
 	var dir := cam.project_ray_normal(mouse)
@@ -215,7 +292,15 @@ func _ground_point(cam: Camera3D, mouse: Vector2) -> Variant:
 func _unhandled_input(event: InputEvent) -> void:
 	if not _panel.visible or selected == &"":
 		return
-	if event.is_action_pressed(&"build_rotate_left"):
+	var piece := ItemDB.get_def(selected) != null and ItemDB.get_def(selected).is_piece()
+	var flip_key: bool = event is InputEventKey and event.pressed and not event.echo \
+		and (event as InputEventKey).keycode == KEY_R
+	if piece and (flip_key or event.is_action_pressed(&"build_rotate_left") or event.is_action_pressed(&"build_rotate_right")):
+		_flip = not _flip
+	elif piece and event.is_action_pressed(&"build_place"):
+		if _ghost.visible:
+			_build.request_piece(selected, _piece_start, _flip)
+	elif event.is_action_pressed(&"build_rotate_left"):
 		_yaw_steps += 1
 	elif event.is_action_pressed(&"build_rotate_right"):
 		_yaw_steps -= 1

@@ -82,6 +82,11 @@ func configure(slots: Array[int], progress_fn: Callable, item_progress_fn: Calla
 		return
 	GameEvents.item_placed.connect(_on_item_placed)
 	GameEvents.item_removed.connect(func(uid: int) -> void: _items.erase(uid))
+	# FIX(C19, Claude): a track piece moves every later item's progress; re-read it from the stored position.
+	GameEvents.track_changed.connect(func() -> void:
+		for uid: int in _items:
+			if _items[uid].has("pos"):
+				_items[uid]["progress"] = float(_item_progress_fn.call(_items[uid]["pos"])))
 	GameEvents.chariot_finished.connect(func(slot: int, place: int, _t: float) -> void: _finish_place[slot] = place)
 	GameEvents.lap_completed.connect(func(slot: int, _l: int, _c: bool) -> void: _bump(_laps, slot))
 	GameEvents.clean_lap.connect(func(slot: int, _l: int) -> void: _bump(_clean, slot))
@@ -236,7 +241,8 @@ func _clean_pass(uid: int) -> bool:
 
 
 func _on_item_placed(uid: int, item_id: StringName, owner_slot: int, xform: Transform3D) -> void:
-	_items[uid] = {"owner": owner_slot, "id": item_id, "progress": float(_item_progress_fn.call(xform.origin))}
+	_items[uid] = {"owner": owner_slot, "id": item_id, "progress": float(_item_progress_fn.call(xform.origin)),
+		"pos": xform.origin}
 
 
 func _on_trap_hit(uid: int, owner_slot: int, victim_slot: int) -> void:

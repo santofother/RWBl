@@ -95,6 +95,13 @@ func _items() -> void:
 		if BuildPhase.is_targeting(d):
 			_check(d.footprint.x > 0.0, "ItemDef %s (targeting card) footprint" % d.id)
 			continue
+		# FIX(C19, Claude): track pieces have a TrackPiece scene in `piece` instead of an Item `scene`.
+		if d.is_piece():
+			var tp := d.piece.instantiate()
+			_check(tp is TrackPiece and d.piece_length > 0.0 and d.category == ItemDef.Category.PIECE,
+				"ItemDef %s (track piece) scene/length/category" % d.id)
+			tp.free()
+			continue
 		_check(d.scene != null and d.footprint.x > 0.0 and d.footprint.y > 0.0, "ItemDef %s scene/footprint" % d.id)
 		var inst := d.scene.instantiate()
 		_check(inst is Item, "ItemDef %s scene root extends Item" % d.id)

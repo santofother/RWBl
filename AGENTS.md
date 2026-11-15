@@ -100,6 +100,9 @@ Godot binary: `$GODOT`, default `/Users/santofothergill/Downloads/Godot.app/Cont
   `--phase=draft|build|race|score`, `--rounds=N`, `--laps=N`, `--phase-time=SEC` (see `docs/ARCHITECTURE.md` §1).
 - Match flow (C09, any scene with a match, read on the host): `--test-totals=slot:points,...` (added to the score
   totals: tests catch-up dealing and the win score), `--free-build` (Build ignores the draft hands).
+- Build (C08, C17, C19, any scene with a match): `--test-place=item@progress,lateral,deg[,slot];...` (a track
+  piece entry is `piece_hairpin@start,side,0[,slot]`, side < 0 = flipped left; `demolish@uid[,slot]`),
+  `--no-bot-build` (host: bots place nothing).
 - Netcode (C07, any scene with `ChariotSync`): `--lag-ms=N` (simulated one-way delay on this peer's input /
   snapshot sends), `--loss=PCT` (simulated drop), `--no-predict` (own chariot interpolated like the others),
   `--net-autotest` (test driver for `chariot_net_test`). F3 also shows a net stats label top-right.

@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://game/track/tests/track_piece_test.gd" id="1"]
+
+[node name="TrackPieceTest" type="Node"]
+script = ExtResource("1")

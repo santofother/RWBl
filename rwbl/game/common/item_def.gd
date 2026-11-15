@@ -3,11 +3,11 @@ extends Resource
 ## Data for one placeable item (DESIGN §5). One `.tres` per item in `game/items/defs/`. Owner: C02 (contract);
 ## the defs themselves belong to C10 and later item cards.
 ## NET: identical on every peer (shipped data); only `id` goes over the network.
-## Public API: exported fields, `has_tag()`. Known tags: flammable, slippery, heavy, hot, living.
+## Public API: exported fields, `has_tag()`, `is_piece()`. Known tags: flammable, slippery, heavy, hot, living.
 # CONTRACT: field names and enums. Add fields at the end only.
 
 enum Rarity { COMMON, UNCOMMON, RARE }
-enum Category { TERRAIN, OBSTACLE, ROMAN, PICKUP, WILDCARD }
+enum Category { TERRAIN, OBSTACLE, ROMAN, PICKUP, WILDCARD, PIECE }
 ## ON_TRACK: centre must be on the drivable surface. TRACK_EDGE: within 4 m outside the edge (ballista).
 ## ANYWHERE: inside the track bounds.
 enum Placement { ON_TRACK, TRACK_EDGE, ANYWHERE }
@@ -38,6 +38,16 @@ enum Placement { ON_TRACK, TRACK_EDGE, ANYWHERE }
 @export var scene: PackedScene
 ## Card art (optional).
 @export var icon: Texture2D
+## Track piece (C19): a scene whose root extends TrackPiece (game/track/pieces/). Non-null = this card replaces
+## a section of road instead of placing an item (`scene` stays null, `category` = PIECE).
+@export var piece: PackedScene = null
+## Track piece (C19): metres of the old centre line the piece replaces (its start-to-end chord).
+@export var piece_length := 0.0
+
+
+## True if this card is a track piece (C19).
+func is_piece() -> bool:
+	return piece != null
 
 
 ## True if this item carries `tag`.

@@ -16,9 +16,10 @@ signal pick_confirmed(index: int)
 const THEME_RES := preload("res://game/hud/hud_theme.tres")
 const RARITY_COLORS: Array[Color] = [Color(0.85, 0.85, 0.85), Color(0.35, 0.65, 1.0), Color(1.0, 0.78, 0.2)]
 const RARITY_NAMES: Array[String] = ["Common", "Uncommon", "Rare"]
-const CATEGORY_NAMES: Array[String] = ["Terrain", "Obstacle", "Roman", "Pickup", "Wildcard"]
+# FIX(C19, Claude): ItemDef.Category gained PIECE (track pieces); without it the draft card indexes out of range.
+const CATEGORY_NAMES: Array[String] = ["Terrain", "Obstacle", "Roman", "Pickup", "Wildcard", "Track piece"]
 const CATEGORY_COLORS: Array[Color] = [Color(0.8, 0.6, 0.35), Color(0.75, 0.75, 0.8), Color(0.9, 0.35, 0.3),
-	Color(0.4, 0.85, 0.5), Color(0.75, 0.45, 0.9)]
+	Color(0.4, 0.85, 0.5), Color(0.75, 0.45, 0.9), Color(0.95, 0.85, 0.55)]
 const WHEEL_OK := Color(0.35, 0.85, 0.4)
 const WHEEL_BROKEN := Color(0.95, 0.15, 0.12)
 const GO_SHOW := 1.0 # TUNE: s the "GO!" stays up

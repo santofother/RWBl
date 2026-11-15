@@ -9,7 +9,17 @@ extends Node3D
 ##   lateral_offset(pos), is_on_track(pos), surface_at(pos), register_surface_patch(node, surface, half),
 ##   unregister_surface_patch(node), start_transform(grid_index), checkpoint_count(),
 ##   checkpoint_progress(i), respawn_transform(progress), is_in_no_build_zone(pos, radius), get_bounds()
+## Track pieces (C19, DESIGN §5.6): splice_piece(def_id, start, flip, uid) -> bool, check_splice(...) -> Splice.*,
+##   apply_splice(uid, def_id, base_start, flip) (no checks), remove_piece(uid), has_piece(uid), piece_at(pos),
+##   pieces() -> Array of {uid, id, start, end, flip, base_start}, to_base_progress(p), piece_world_points(...),
+##   static splice_text(code), static points_to_curve(points, tangents).
+##   A piece replaces `ItemDef.piece_length` m of a straight stretch of the ORIGINAL road with the piece's own
+##   centre line (TrackPiece). Pieces never overlap, so each one is stored in base-curve progress and the curve is
+##   recomposed from the base + all pieces (removing one restores the original section). After every change the
+##   road, walls, bounds and checkpoints are rebuilt and GameEvents.track_changed fires (on this peer).
 # CONTRACT: API above. Progress increases in the driving direction; the start/finish line is progress 0.
+# CONTRACT: pieces never touch [0, PIECE_KEEP_AFTER] or the last PIECE_KEEP_BEFORE m, so the start line, the grid
+#   and progress 0 never move.
 
 ## Drivable width in metres.
 @export var track_width := 14.0 # TUNE
@@ -30,7 +40,23 @@ const GRID_ROW_GAP := 5.0
 const GRID_FIRST_ROW := 5.0
 const MESH_STEP := 2.0 # metres between road/wall mesh slices
 
+## check_splice() codes.
+enum Splice { OK, UNKNOWN, START_ZONE, NOT_STRAIGHT, OVERLAP, SELF_INTERSECT }
+const SPLICE_TEXT: Array[String] = ["OK", "Not a track piece", "Too close to the start straight",
+	"Needs a straight stretch of road", "Overlaps another track piece", "The new road would cross the track"]
+const PIECE_KEEP_AFTER := 40.0 # TUNE: m after the start line where no piece may start
+const PIECE_KEEP_BEFORE := 40.0 # TUNE: m before the start line where no piece may end
+const PIECE_GAP := 4.0 # TUNE: m of untouched road between two pieces
+const PIECE_STRAIGHT_TOL := 0.3 # m the replaced section may bend away from a straight line
+const PIECE_SAMPLE := 1.0 # m between centre-line points of a recomposed curve
+const SELF_ARC := 24.0 # m along the road under which two points are neighbours, not a crossing
+
 var _curve: Curve3D
+var _base_curve: Curve3D # the original centre line (never modified)
+var _pieces: Array[Dictionary] = [] # sorted by base_start: {uid, id, base_start, flip, cut, grow}
+var _shapes: Dictionary = {} # piece def id -> [points, tangents, length] in piece space
+var _auto_uid := 1000000
+var _visuals: Array[Node] = []
 var _bounds_local := AABB()
 var _patches: Dictionary = {} # Node3D -> [surface, half_extents]
 
@@ -45,6 +71,7 @@ func _ready() -> void:
 		_curve = (tmp.get_node(^"Path") as Path3D).curve
 		tmp.free()
 	_curve.bake_interval = 0.5
+	_base_curve = _curve
 	_compute_bounds()
 	_build_visuals()
 
@@ -166,6 +193,324 @@ func _compute_bounds() -> void:
 	_bounds_local = AABB(Vector3(lo.x - m, -1.0, lo.z - m), Vector3(hi.x - lo.x + 2.0 * m, 2.0, hi.z - lo.z + 2.0 * m))
 
 
+# ---------------------------------------------------------------- track pieces (C19)
+
+## Validate (check_splice) and, if OK, splice piece `def_id` in starting at `start_progress` (current progress).
+## `flip` mirrors it to the left. `uid` -1 = pick one. NET: host validates; peers use apply_splice().
+func splice_piece(def_id: StringName, start_progress: float, flip := false, uid := -1) -> bool:
+	if check_splice(def_id, start_progress, flip) != Splice.OK:
+		return false
+	apply_splice(uid, def_id, to_base_progress(start_progress), flip)
+	return true
+
+
+## Would splicing `def_id` at `start_progress` work? Returns a Splice code (OK first fail wins, in this order:
+## unknown, start zone, overlap, not straight, self-intersection). NET: host (authoritative) and clients (ghost).
+func check_splice(def_id: StringName, start_progress: float, flip := false) -> int:
+	var d := ItemDB.get_def(def_id)
+	if d == null or not d.is_piece() or _shape(def_id).is_empty() or d.piece_length <= 0.0:
+		return Splice.UNKNOWN
+	var cut := d.piece_length
+	var s := start_progress
+	if not is_finite(s) or s < PIECE_KEEP_AFTER or s + cut > length() - PIECE_KEEP_BEFORE:
+		return Splice.START_ZONE
+	for i in _pieces.size():
+		var ps := _cur_start(i)
+		var pe := ps + float(_pieces[i]["cut"]) + float(_pieces[i]["grow"])
+		if s < pe + PIECE_GAP and s + cut + PIECE_GAP > ps:
+			return Splice.OVERLAP
+	var b := to_base_progress(s)
+	if not _base_straight(b, cut):
+		return Splice.NOT_STRAIGHT
+	var trial := _pieces.duplicate()
+	var entry := _entry(-1, def_id, b, flip)
+	trial.append(entry)
+	trial.sort_custom(_by_base)
+	if _self_intersects(_compose(trial), trial.find(entry)):
+		return Splice.SELF_INTERSECT
+	return Splice.OK
+
+
+## Splice without any checks (every peer applies what the host validated). Returns the uid used.
+func apply_splice(uid: int, def_id: StringName, base_start: float, flip := false) -> int:
+	if uid < 0:
+		uid = _auto_uid
+		_auto_uid += 1
+	_pieces.append(_entry(uid, def_id, base_start, flip))
+	_pieces.sort_custom(_by_base)
+	_rebuild()
+	var i := _index_of(uid)
+	print("[Track] SPLICE %d %s at %.1f (base %.1f) flip=%s length %.1f" % [uid, def_id, _cur_start(i), base_start,
+		flip, length()])
+	return uid
+
+
+## Remove piece `uid` and restore the original section. False if there is no such piece. NET: every peer.
+func remove_piece(uid: int) -> bool:
+	var i := _index_of(uid)
+	if i < 0:
+		return false
+	_pieces.remove_at(i)
+	_rebuild()
+	print("[Track] UNSPLICE %d length %.1f" % [uid, length()])
+	return true
+
+
+## True if a piece with this uid is spliced in.
+func has_piece(uid: int) -> bool:
+	return _index_of(uid) >= 0
+
+
+## uid of the piece whose road covers `pos`, or -1.
+func piece_at(pos: Vector3) -> int:
+	if not is_on_track(pos):
+		return -1
+	var p := progress_at(pos)
+	for i in _pieces.size():
+		var ps := _cur_start(i)
+		if p >= ps and p <= ps + float(_pieces[i]["cut"]) + float(_pieces[i]["grow"]):
+			return int(_pieces[i]["uid"])
+	return -1
+
+
+## Every spliced piece in driving order: {uid, id, start, end (current progress), flip, base_start}.
+func pieces() -> Array:
+	var out: Array = []
+	for i in _pieces.size():
+		var e: Dictionary = _pieces[i]
+		var ps := _cur_start(i)
+		out.append({"uid": e["uid"], "id": e["id"], "start": ps, "end": ps + float(e["cut"]) + float(e["grow"]),
+			"flip": e["flip"], "base_start": e["base_start"]})
+	return out
+
+
+## Current progress -> progress on the original centre line (only meaningful outside pieces).
+func to_base_progress(p: float) -> float:
+	var off := 0.0
+	for i in _pieces.size():
+		var ps := _cur_start(i)
+		if p >= ps + float(_pieces[i]["cut"]) + float(_pieces[i]["grow"]):
+			off += float(_pieces[i]["grow"])
+		elif p > ps:
+			return float(_pieces[i]["base_start"]) + minf(p - ps, float(_pieces[i]["cut"]))
+		else:
+			break
+	return p - off
+
+
+## World-space centre line `def_id` would have if spliced at `start_progress` (build ghost). Empty if unknown.
+func piece_world_points(def_id: StringName, start_progress: float, flip := false) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	var d := ItemDB.get_def(def_id)
+	var sh := _shape(def_id)
+	if d == null or sh.is_empty():
+		return out
+	var xf := _piece_xform(to_base_progress(start_progress), d.piece_length)
+	for lp: Vector3 in sh[0]:
+		out.append(to_global(xf * (Vector3(-lp.x, lp.y, lp.z) if flip else lp)))
+	return out
+
+
+## Player-facing text for a Splice code.
+static func splice_text(code: int) -> String:
+	return SPLICE_TEXT[code] if code >= 0 and code < SPLICE_TEXT.size() else "Rejected"
+
+
+## Smooth Curve3D through `points` with unit `tangents` (cubic Hermite handles).
+static func points_to_curve(points: PackedVector3Array, tangents: PackedVector3Array) -> Curve3D:
+	var c := Curve3D.new()
+	c.bake_interval = 0.5
+	var n := points.size()
+	for i in n:
+		var hp := points[i].distance_to(points[i - 1]) if i > 0 else 0.0
+		var hn := points[i + 1].distance_to(points[i]) if i < n - 1 else 0.0
+		c.add_point(points[i], -tangents[i] * hp / 3.0, tangents[i] * hn / 3.0)
+	return c
+
+
+func _entry(uid: int, def_id: StringName, base_start: float, flip: bool) -> Dictionary:
+	var d := ItemDB.get_def(def_id)
+	var sh := _shape(def_id)
+	return {"uid": uid, "id": def_id, "base_start": base_start, "flip": flip, "cut": d.piece_length,
+		"grow": float(sh[2]) - d.piece_length}
+
+
+static func _by_base(a: Dictionary, b: Dictionary) -> bool:
+	return float(a["base_start"]) < float(b["base_start"])
+
+
+func _index_of(uid: int) -> int:
+	for i in _pieces.size():
+		if int(_pieces[i]["uid"]) == uid:
+			return i
+	return -1
+
+
+func _cur_start(i: int) -> float:
+	var off := 0.0
+	for j in i:
+		off += float(_pieces[j]["grow"])
+	return float(_pieces[i]["base_start"]) + off
+
+
+## Piece-space shape of `def_id`: [points, tangents, length], cached. Empty if it has no TrackPiece scene.
+func _shape(def_id: StringName) -> Array:
+	if _shapes.has(def_id):
+		return _shapes[def_id]
+	var out: Array = []
+	var d := ItemDB.get_def(def_id)
+	if d and d.piece:
+		var inst := d.piece.instantiate()
+		var tp := inst as TrackPiece
+		if tp:
+			var pt: Array = tp.build_points()
+			var pts: PackedVector3Array = pt[0]
+			var len := 0.0
+			for k in range(1, pts.size()):
+				len += pts[k].distance_to(pts[k - 1])
+			out = [pts, pt[1], len]
+			var chord := pts[pts.size() - 1].length()
+			if absf(chord - d.piece_length) > 0.05:
+				push_warning("[Track] piece %s chord %.2f != piece_length %.2f" % [def_id, chord, d.piece_length])
+		inst.free()
+	_shapes[def_id] = out
+	return out
+
+
+## Transform that puts piece space on the base road at `base_start` (-Z along the chord, origin at the start).
+func _piece_xform(base_start: float, cut: float) -> Transform3D:
+	var l := _base_curve.get_baked_length()
+	var p0 := _base_curve.sample_baked(fposmod(base_start, l))
+	var p1 := _base_curve.sample_baked(fposmod(base_start + cut, l))
+	var f := p1 - p0
+	f.y = 0.0
+	if f.length_squared() < 0.0001:
+		f = Vector3.FORWARD
+	return Transform3D(Basis.looking_at(f.normalized(), Vector3.UP), p0)
+
+
+func _base_straight(b: float, cut: float) -> bool:
+	var l := _base_curve.get_baked_length()
+	var p0 := _base_curve.sample_baked(fposmod(b, l))
+	var p1 := _base_curve.sample_baked(fposmod(b + cut, l))
+	if absf(p0.distance_to(p1) - cut) > PIECE_STRAIGHT_TOL * 2.0:
+		return false
+	var n := maxi(2, ceili(cut / 2.0))
+	for k in range(1, n):
+		var q := _base_curve.sample_baked(fposmod(b + cut * k / n, l))
+		var on := Geometry3D.get_closest_point_to_segment(q, p0, p1)
+		if q.distance_to(on) > PIECE_STRAIGHT_TOL:
+			return false
+	# both ends must already run along the chord, or the joints would kink
+	var dir := (p1 - p0).normalized()
+	for e: float in [b, b + cut]:
+		if _base_tangent(e).dot(dir) < 0.9986: # cos 3°
+			return false
+	return true
+
+
+func _base_tangent(s: float) -> Vector3:
+	var l := _base_curve.get_baked_length()
+	var t := _base_curve.sample_baked(fposmod(s + 0.25, l)) - _base_curve.sample_baked(fposmod(s - 0.25, l))
+	return t.normalized() if t.length_squared() > 0.0 else Vector3.FORWARD
+
+
+## Base curve + `list` (sorted pieces) as dense points: {pos, tan, own (index into list, -1 = base road)}.
+## The last point repeats the first, so the loop is closed.
+func _compose(list: Array) -> Dictionary:
+	var pos := PackedVector3Array()
+	var tan := PackedVector3Array()
+	var own := PackedInt32Array()
+	var cursor := 0.0
+	for i in list.size():
+		var e: Dictionary = list[i]
+		_append_base(pos, tan, own, cursor, float(e["base_start"]))
+		var sh := _shape(e["id"])
+		var xf := _piece_xform(float(e["base_start"]), float(e["cut"]))
+		var pts: PackedVector3Array = sh[0]
+		var tans: PackedVector3Array = sh[1]
+		for k in pts.size() - 1: # the end point is the base road's next point
+			var lp := pts[k]
+			var lt := tans[k]
+			if e["flip"]:
+				lp.x = -lp.x
+				lt.x = -lt.x
+			pos.append(xf * lp)
+			tan.append((xf.basis * lt).normalized())
+			own.append(i)
+		cursor = float(e["base_start"]) + float(e["cut"])
+	_append_base(pos, tan, own, cursor, _base_curve.get_baked_length())
+	pos.append(pos[0])
+	tan.append(tan[0])
+	own.append(-1)
+	return {"pos": pos, "tan": tan, "own": own}
+
+
+func _append_base(pos: PackedVector3Array, tan: PackedVector3Array, own: PackedInt32Array, a: float,
+		b: float) -> void:
+	if b - a < 0.01:
+		return
+	var n := maxi(1, ceili((b - a) / PIECE_SAMPLE))
+	var l := _base_curve.get_baked_length()
+	for k in n:
+		var s := a + (b - a) * k / n
+		pos.append(_base_curve.sample_baked(fposmod(s, l)))
+		tan.append(_base_tangent(s))
+		own.append(-1)
+
+
+## True if any point of piece `idx` comes closer than a road width (+ walls) to a non-neighbouring part of the road.
+func _self_intersects(o: Dictionary, idx: int) -> bool:
+	var pos: PackedVector3Array = o["pos"]
+	var own: PackedInt32Array = o["own"]
+	var n := pos.size() - 1
+	var cum := PackedFloat32Array()
+	cum.resize(n + 1)
+	for k in range(1, n + 1):
+		cum[k] = cum[k - 1] + pos[k].distance_to(pos[k - 1])
+	var total := cum[n]
+	var sep := track_width + 2.0 * wall_thickness
+	var sep2 := sep * sep
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	var mine := PackedInt32Array()
+	for k in range(0, n, 2):
+		if own[k] == idx:
+			mine.append(k)
+			lo = Vector2(minf(lo.x, pos[k].x), minf(lo.y, pos[k].z))
+			hi = Vector2(maxf(hi.x, pos[k].x), maxf(hi.y, pos[k].z))
+	lo -= Vector2(sep, sep)
+	hi += Vector2(sep, sep)
+	for j in range(0, n, 2):
+		var q := pos[j]
+		if q.x < lo.x or q.z < lo.y or q.x > hi.x or q.z > hi.y:
+			continue
+		for k in mine:
+			var arc := absf(cum[k] - cum[j])
+			if minf(arc, total - arc) <= SELF_ARC:
+				continue
+			var dx := pos[k].x - q.x
+			var dz := pos[k].z - q.z
+			if dx * dx + dz * dz < sep2:
+				return true
+	return false
+
+
+func _rebuild() -> void:
+	if _pieces.is_empty():
+		_curve = _base_curve
+	else:
+		var o := _compose(_pieces)
+		_curve = points_to_curve(o["pos"], o["tan"])
+	var path := get_node_or_null(^"Path") as Path3D
+	if path:
+		path.curve = _curve
+	_compute_bounds()
+	_clear_visuals()
+	_build_visuals()
+	GameEvents.track_changed.emit()
+
+
 # ---------------------------------------------------------------- generated visuals + collision
 
 func _build_visuals() -> void:
@@ -178,7 +523,7 @@ func _build_visuals() -> void:
 		abyss.mesh = ap
 		abyss.position = Vector3(b.position.x + b.size.x * 0.5, -60.0, b.position.z + b.size.z * 0.5)
 		abyss.material_override = _mat(Color(0.05, 0.04, 0.05))
-		add_child(abyss)
+		_add_visual(abyss)
 	else:
 		var ground := StaticBody3D.new()
 		ground.name = "Ground"
@@ -194,7 +539,7 @@ func _build_visuals() -> void:
 		sand.position = Vector3(b.position.x + b.size.x * 0.5, 0.0, b.position.z + b.size.z * 0.5)
 		sand.material_override = _mat(Color(0.82, 0.72, 0.52))
 		ground.add_child(sand)
-		add_child(ground)
+		_add_visual(ground)
 
 	var steps := maxi(int(length() / MESH_STEP), 8)
 	var h := track_width * 0.5
@@ -232,7 +577,7 @@ func _build_visuals() -> void:
 	road_mi.name = "Road"
 	road_mi.mesh = road.commit()
 	road_mi.material_override = _mat(Color(0.55, 0.5, 0.45))
-	add_child(road_mi)
+	_add_visual(road_mi)
 
 	var walls := StaticBody3D.new()
 	walls.name = "Walls" if not pit else "Slab"
@@ -253,7 +598,7 @@ func _build_visuals() -> void:
 		tri.backface_collision = true
 		floor_shape.shape = tri
 		walls.add_child(floor_shape)
-	add_child(walls)
+	_add_visual(walls)
 
 	var line := MeshInstance3D.new()
 	line.name = "StartLine"
@@ -262,7 +607,20 @@ func _build_visuals() -> void:
 	line.mesh = box
 	line.material_override = _mat(Color.WHITE)
 	line.transform = Transform3D(_local_t(0.0).basis, _local_t(0.0).origin + Vector3.UP * 0.04)
-	add_child(line)
+	_add_visual(line)
+
+
+func _add_visual(n: Node) -> void:
+	_visuals.append(n)
+	add_child(n)
+
+
+func _clear_visuals() -> void:
+	for n in _visuals:
+		if is_instance_valid(n):
+			remove_child(n) # WHY: frees the names "Road"/"Walls" now, so the rebuilt ones keep them
+			n.queue_free()
+	_visuals.clear()
 
 
 ## Transform on the centre line in this node's local space (-Z = driving direction).
