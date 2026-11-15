@@ -52,8 +52,9 @@ for r in 2 3; do
 done
 
 # (3) early win
-assert_log win '^\[Game\] WIN slot 3 score 30' || fail=1
-assert_log win '^\[Game\] RESULT 3 .* score=30 place=1' || fail=1
+# FIX(C11, claude): real scoring now adds round points on top of --test-totals, so the winner has >= 30.
+assert_log win '^\[Game\] WIN slot 3 score (3[0-9]|[4-9][0-9])' || fail=1
+assert_log win '^\[Game\] RESULT 3 .* score=(3[0-9]|[4-9][0-9]) place=1' || fail=1
 grep -q '^\[Game\] PHASE draft 2' "$OUT/win.log" && { echo "  FAIL match went on after 30 points"; fail=1; }
 [ "$(grep -c '^\[Game\] RESULT ' "$OUT/win.log")" = 5 ] && echo "  ok   30 points ends after round 1" || fail=1
 
