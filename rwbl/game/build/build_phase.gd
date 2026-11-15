@@ -83,6 +83,17 @@ func place_for_slot(slot: int, item_id: StringName, xform: Transform3D) -> int: 
 	return code
 
 
+## Host: spawn `item_id` for `slot` outside the build rules (crow drops, C12). Returns the uid.
+# FIX(C12, Claude): crows need to spawn items mid-race like a placed item; _rpc_spawn_item is private.
+func spawn_extra(slot: int, item_id: StringName, xform: Transform3D) -> int: # NET: host
+	if not multiplayer.is_server() or ItemDB.get_def(item_id) == null:
+		return -1
+	var uid := _next_uid
+	_next_uid += 1
+	_rpc_spawn_item.rpc(uid, item_id, xform, slot)
+	return uid
+
+
 ## Check a placement without doing it (host: authoritative; client: preview). Returns the first failing
 ## PlaceResult code, in this order: phase, item, hand, budget, transform, bounds, placement, no-build zone,
 ## gap, path.

@@ -205,7 +205,10 @@ func apply_snapshot(s: PackedFloat32Array) -> void:
 	wheel_state = int(s[ChariotSnapshot.WHEELS])
 	stamina = s[ChariotSnapshot.STAMINA]
 	_flags = int(s[ChariotSnapshot.FLAGS])
+	var was_dead := dead
 	dead = _flags & ChariotSnapshot.FLAG_DEAD != 0
+	if dead != was_dead:
+		_set_solid(not dead)
 	frozen = _flags & ChariotSnapshot.FLAG_FROZEN != 0
 	grounded = absf(velocity.y) < 0.01
 	_sync_bodies()
@@ -267,6 +270,7 @@ func kill(cause: StringName, source_slot: int = -1, item_uid: int = -1) -> void:
 		return
 	dead = true
 	velocity = Vector3.ZERO
+	_set_solid(false)
 	died.emit(cause, source_slot, item_uid)
 
 
@@ -284,10 +288,19 @@ func respawn(xform: Transform3D) -> void:
 	_yaw_rate = 0.0
 	grounded = true
 	dead = false
+	_set_solid(true)
 	_effects.clear()
 	_hit_cd.clear()
 	_sync_bodies()
 	respawned.emit()
+
+
+## Dead chariots are ghosts: other chariots and item triggers pass through them (C12). Any peer.
+func _set_solid(on: bool) -> void:
+	if _horse_body == null:
+		return
+	_horse_body.collision_layer = Layers.HORSES if on else 0
+	_cart_body.collision_layer = Layers.CART if on else 0
 
 
 ## Tint every "TeamColor" surface (blankets, plumes, cape, cart stripe). Any peer, visual only.

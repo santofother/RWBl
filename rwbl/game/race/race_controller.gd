@@ -202,8 +202,7 @@ func _track_chariots(now: float) -> void:
 		if c == null:
 			continue
 		if c.dead:
-			_respawn_dead(slot, c, now)
-			continue
+			continue # FIX(C12, Claude): Combat respawns dead chariots now (_respawn_dead is unused)
 		var last: float = _u[slot]
 		var cur := _nearest_unwrapped(_wrapped(_m.track.progress_at(c.global_position), total), last, total)
 		_u[slot] = cur
