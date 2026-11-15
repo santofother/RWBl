@@ -124,6 +124,8 @@ swap freely if one tool hits its limit.
 | C12 | Damage: wheels, collisions, stun, respawn, crow spectator | Claude | T2 | 4, 6 | Wheel loss changes handling; respawn < 3 s |
 | C13 | Camera swing Build→Race, race camera polish (FOV, sway, pullback) | Either | T3 | 7 | You check it in a build |
 | C14 | HUD: lap, position, stamina, ammo, phase timer, draft cards UI | Codex (Terra for screenshot check) | T3 | 3, 4 | Screenshots readable at 1080p |
+| C16 | Match rules v2: no round cap, win by finishing 1st at ≥ win score | Either | T3 | 3 | Match test: 30+ without a race win keeps going |
+| C17 | Demolish card: click a placed item in Build to remove it | Either | T2 | 5.4 | Build test: demolished item gone on every peer |
 
 **P1 playtest** (you + friends, full loop with greybox art). Then **C15 triage** (Claude only, T1): turns your
 notes into fix cards and writes the detailed cards for wave 4+.

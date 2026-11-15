@@ -23,6 +23,8 @@ DONE (on main, date) · BLOCKED (reason)
 | C12 | Damage, wheels, respawn, crow | 3 | Either (Claude) · T2 | C07, C10 | READY | |
 | C13 | Camera swing + race camera polish | 3 | Either · T3 | C05, C08 | READY | |
 | C14 | HUD + draft cards UI | 3 | Either (Codex) · T3 | C09 | DONE 2026-11-14 | c14-hud |
+| C16 | Match rules v2: no round cap, win = 1st above win score | 3 | Either · T3 | C09 | READY | |
+| C17 | Demolish card (remove a placed item) | 3 | Either · T2 | C08, C10 | READY | |
 | P1 | Playtest 1 (user + friends) | — | user | wave 3 | TODO | |
 | C15 | Triage + plan waves 4+ | — | Claude only · T1 | P1 | TODO | |
 

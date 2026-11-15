@@ -211,6 +211,12 @@ func _ice() -> void:
 	_check(yaw0[0] != INF and locked[0], "ice: NO_STEER on the chariot while its horses are on the ice")
 	_check(rad_to_deg(turned[0]) < 1.0, "ice: full steering lock has no effect (%.2f deg)" % rad_to_deg(turned[0]))
 	_check(_trap_for(it.uid).size() == 1, "ice: trap_hit")
+	# Stopped on the ice: steering works again, so the chariot can always get off it.
+	_c.respawn(it.global_transform)
+	await _drive(1.5, _inp(1.0, 0.4))
+	var yaw_turn := rad_to_deg(absf(angle_difference(it.global_rotation.y, _c.global_rotation.y)))
+	_check(yaw_turn > 10.0 and _flat_speed() > 1.0,
+		"ice: a chariot that stopped on the ice can steer and drive off (turned %.0f deg)" % yaw_turn)
 	await _clear_items()
 
 

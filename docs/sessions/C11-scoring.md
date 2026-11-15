@@ -13,8 +13,10 @@ Points that reward clever-but-fair traps: the DESIGN §6 table, with "nobody pas
 to it" paying 0 for that item.
 
 ## Steps
-- `ScoreTable` resource (finish 5/3/2/1/0, trap hit +1 capped at 3 per round, kill +2, self-kill −1, clean lap
-  +1, last-to-finish mercy +1, Grand Circus ×2) registered with `TuningPanel`.
+- `ScoreTable` resource (finish 5/3/2/1/0, trap hit +1 capped at 3 per round, kill +2 each, self-kill −1, clean
+  lap +1, last-to-finish mercy +1, **lap completed +1 each, fewest deaths this round +2 (ties all get it; count
+  `chariot_died` per slot)**, Grand Circus ×2) registered with `TuningPanel`. (User decision 2026-11-14: laps,
+  fewest deaths and kills are added to the table, not instead of it.)
 - Host listens to `chariot_finished, race_over, trap_hit, kill, self_kill, clean_lap, chariot_died,
   item_placed`. Trap hits only count when victim ≠ owner.
 - Anti-grief, per item: the item's track progress = `track.progress_at(item pos)`. A slot "passed" it when its
@@ -29,8 +31,8 @@ to it" paying 0 for that item.
 
 ## Tests
 - `score_test.sh` + `scoring/tests/score_test.tscn`: a Scoring node with fake players and a fake race
-  progress source; emit scripted event sequences and assert totals: finish points; trap cap at 3; owner hit
-  not counted; self-kill −1; mercy point; clean lap; Grand Circus doubling; anti-grief: (a) item nobody passes →
+  progress source; emit scripted event sequences and assert totals: finish points; lap points; fewest-deaths
+  bonus (incl. a tie); two kills = +4; trap cap at 3; owner hit not counted; self-kill −1; mercy point; clean lap; Grand Circus doubling; anti-grief: (a) item nobody passes →
   0, (b) everyone who reached it died → 0, (c) one passes → trap points count.
 - Manual (user): **F6** on `game/match/match.tscn`, play one round, check the score screen reads sensibly.
 

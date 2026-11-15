@@ -7,6 +7,7 @@ extends Resource
 
 @export_group("Ice")
 @export_range(0.05, 1.0) var ice_no_steer_refresh := 0.15 # TUNE: NO_STEER lasts this long after leaving, s
+@export_range(0.0, 15.0) var ice_steer_below := 4.0 # TUNE: m/s; slower than this you can steer on ice (never trapped)
 @export_group("Laurel pad")
 @export_range(0.1, 5.0) var pad_boost_time := 1.5 # TUNE: s
 @export_range(0.1, 3.0) var pad_boost_strength := 1.0 # TUNE: x whip boost

@@ -32,8 +32,12 @@ Each round has four phases:
 | Race | Third person behind chariot | ~60-90s | 1-2 laps |
 | Score | UI | ~10s | Points, replays of highlights, next round |
 
-- 6-8 rounds per match. The final round is the "Grand Circus": double points, longer track, and all items active.
-- A winner is decided by the highest score after the last round, or the first player to 30 points.
+- **No round cap.** Rounds repeat until someone wins.
+- **Winning:** the win score is 30 points. You only win by **finishing 1st in a race while your total (with
+  that round's points) is at or above the win score.** Reaching 30 isn't enough on its own: you have to win
+  a round from there, and everyone else can still catch up.
+- The "Grand Circus" (double points, longer track, all items active) was the final round. With no round cap
+  there's no final round: see open question 9.
 
 ## 4. Chariot driving model
 
@@ -92,6 +96,8 @@ Every item has tags (`flammable`, `slippery`, `heavy`, `hot`, `living`) so inter
 - **Mirror:** spawns a ghost chariot that copies the leader's route.
 - **Colosseum gate:** closes behind the first-place chariot.
 - **Emperor's thumb:** at the end of a round, the placer boosts or penalizes one chosen player.
+- **Demolish (uncommon):** instead of placing something, in the Build phase you click any placed item or track
+  piece and it's removed. It can't remove the base track or the start/finish line.
 
 ### 5.5 Draft and placement rules
 - 3 random cards per player per round, weighted by rarity. Cards are items or track pieces (§5.6), mixed.
@@ -125,7 +131,9 @@ changes every round. Pieces stay for the rest of the match, like items.
 |---|---|
 | Finish 1st / 2nd / 3rd / 4th / 5th | 5 / 3 / 2 / 1 / 0 |
 | Your trap hits another player | +1 each (max 3 per round) |
-| Spear or wheel kill | +2 |
+| Each lap completed | +1 |
+| Fewest deaths this round (ties all get it) | +2 |
+| Each kill (spear, wheel or ram; not your trap) | +2 |
 | Die to your own trap | -1 |
 | Clean lap (no collisions) | +1 |
 | Last to finish | +1 mercy point |
@@ -232,6 +240,8 @@ One Steam app for the whole hub, with each game as a mode, is the simplest. Sepa
 7. Cross-game progression (unlocks, currency) in the hub: in scope for v1 or later?
 8. ~~Track pieces (§5.6): who places them?~~ **Decided:** drafted with items and placed in the Build phase,
    one card per player per round (§3, §5.5).
+9. **Grand Circus without a round cap:** drop it, or trigger it differently (e.g. the round after someone
+   first reaches the win score)? Until decided, no round is a Grand Circus.
 
 ## 12. Risks
 
