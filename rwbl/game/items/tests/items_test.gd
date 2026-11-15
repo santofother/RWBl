@@ -136,6 +136,7 @@ func _run_all() -> void:
 	await _axe()
 	await _pit()
 	await _slide_far()
+	await _removed_cleanup()
 
 
 func _oil() -> void:
@@ -319,3 +320,21 @@ func _slide_far() -> void:
 	ItemInteractions.check_item(col)
 	_check(col.applied_rules.size() == before, "tags: a pair's rule fires once")
 	await _clear_items()
+
+
+## C17 Demolish: a removed surface item gives the road back (patch unregisters on _exit_tree), and the
+## Demolish card is a targeting card (no scene).
+func _removed_cleanup() -> void:
+	_clear_items()
+	await get_tree().physics_frame
+	var at := 120.0
+	var oil := _place(&"oil_slick", at)
+	await get_tree().physics_frame
+	var p := track.transform_at(at).origin
+	_check(track.surface_at(p) == Surface.OIL, "removed: oil patch registered before removal")
+	oil.queue_free()
+	await get_tree().physics_frame
+	_check(track.surface_at(p) == Surface.NORMAL, "removed: road is normal again after the oil is freed")
+	var d := ItemDB.get_def(&"demolish")
+	_check(d != null and d.scene == null and BuildPhase.is_targeting(d) and d.category == ItemDef.Category.WILDCARD
+		and d.rarity == ItemDef.Rarity.UNCOMMON, "demolish def: uncommon wildcard targeting card")

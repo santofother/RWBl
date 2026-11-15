@@ -91,6 +91,10 @@ func _items() -> void:
 	for id in [&"oil_slick", &"mud_patch", &"ice_sheet", &"speed_pad", &"ramp", &"column", &"swinging_axe", &"pit"]:
 		_check(ids.has(id), "ItemDef %s missing" % id)
 	for d in ItemDB.all_defs():
+		# FIX(C17, Claude): targeting cards (Demolish) have no scene by design; see C17 handoff.
+		if BuildPhase.is_targeting(d):
+			_check(d.footprint.x > 0.0, "ItemDef %s (targeting card) footprint" % d.id)
+			continue
 		_check(d.scene != null and d.footprint.x > 0.0 and d.footprint.y > 0.0, "ItemDef %s scene/footprint" % d.id)
 		var inst := d.scene.instantiate()
 		_check(inst is Item, "ItemDef %s scene root extends Item" % d.id)

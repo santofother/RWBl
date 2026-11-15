@@ -3,6 +3,8 @@ extends CanvasLayer
 ## Local build-phase editor: hand list, ghost under the mouse (green = the local validate() says OK, red = no,
 ## with the reason), snap to a grid, Q/E rotate, LMB place, RMB cancel, Done button, result toast. Owner: C08.
 ## C14 restyles it later (hand + toasts). Created by BuildPhase in match_setup().
+## Targeting cards (Demolish, C17): no ghost; a red box highlights the placed item under the mouse, LMB asks
+## the host to remove it (BuildPhase.request_demolish). Nothing under the mouse = nothing happens.
 ## NET: local only. The host's answer (place_result) is what counts; the colour is only a preview.
 ## Public API: setup(m, build), `selected` (item id or &"").
 
@@ -24,6 +26,7 @@ var _ghost_xf := Transform3D()
 var _last_key := ""
 var _last_code := -1
 var _hand_key := ""
+var _target_uid := -1 # Demolish: item under the mouse, or -1
 
 
 ## Wire to the match. Called once by BuildPhase.
@@ -64,7 +67,7 @@ func _build_widgets() -> void:
 		_build.request_done())
 	box.add_child(done)
 	var hint := Label.new()
-	hint.text = "Click an item, then:\nLMB place · RMB cancel\nQ / E rotate · wheel zoom\nWASD / middle-drag pan"
+	hint.text = "Click an item, then:\nLMB place · RMB cancel\nDemolish: click a placed item\nQ / E rotate · wheel zoom\nWASD / middle-drag pan"
 	hint.modulate = Color(1, 1, 1, 0.7)
 	box.add_child(hint)
 	_reason = Label.new()
@@ -96,10 +99,11 @@ func _select(id: StringName) -> void:
 	_yaw_steps = 0
 	_last_key = ""
 	_reason.text = ""
+	_target_uid = -1
 	if _ghost:
 		_ghost.visible = false
 		var d := ItemDB.get_def(id)
-		if d:
+		if d and not BuildPhase.is_targeting(d):
 			var box := BoxMesh.new()
 			var h := 1.2 if d.blocks_path else 0.15
 			box.size = Vector3(d.footprint.x, h, d.footprint.y)
@@ -148,6 +152,9 @@ func _process(delta: float) -> void:
 		_ghost.visible = false
 		return
 	var pos: Vector3 = hit
+	if BuildPhase.is_targeting(ItemDB.get_def(selected)):
+		_update_target(pos)
+		return
 	var s := _build.tuning.snap
 	pos.x = snappedf(pos.x, s)
 	pos.z = snappedf(pos.z, s)
@@ -169,6 +176,27 @@ func _process(delta: float) -> void:
 		var ok := _last_code == PlaceResult.OK
 		_ghost_mat.albedo_color = Color(0.2, 1.0, 0.3, 0.55) if ok else Color(1.0, 0.2, 0.2, 0.55)
 		_reason.text = "" if ok else PlaceResult.describe(_last_code)
+
+
+func _update_target(pos: Vector3) -> void:
+	_target_uid = _build.item_at(pos)
+	var it: Item = _build.items().get(_target_uid)
+	if it == null or not is_instance_valid(it) or it.def == null:
+		_target_uid = -1
+		_ghost.visible = false
+		_reason.text = "Point at a placed item"
+		return
+	var box := _ghost.mesh as BoxMesh
+	if box == null:
+		box = BoxMesh.new()
+		_ghost.mesh = box
+	var h := 1.6 if it.def.blocks_path else 0.3
+	box.size = Vector3(it.def.footprint.x + 0.3, h, it.def.footprint.y + 0.3)
+	_ghost.global_transform = Transform3D(it.global_basis.orthonormalized(), it.global_position + Vector3.UP * h * 0.5)
+	_ghost_mat.albedo_color = Color(1.0, 0.15, 0.1, 0.6)
+	_ghost.visible = true
+	var name_txt := it.def.display_name if it.def.display_name != "" else String(it.def.id)
+	_reason.text = "Click to remove %s" % name_txt
 
 
 func _ground_point(cam: Camera3D, mouse: Vector2) -> Variant:
@@ -194,6 +222,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed(&"build_cancel"):
 		_select(&"")
 		_hand_key = ""
+	elif event.is_action_pressed(&"build_place") and BuildPhase.is_targeting(ItemDB.get_def(selected)):
+		if _target_uid >= 0:
+			_build.request_demolish(_target_uid)
 	elif event.is_action_pressed(&"build_place") and _ghost.visible:
 		_build.request_place(selected, _ghost_xf)
 	else:
@@ -203,9 +234,11 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _on_place_result(code: int, item_id: StringName) -> void:
 	_toast.text = "%s: %s" % [ItemDB.get_def(item_id).display_name if ItemDB.get_def(item_id) else String(item_id),
-		"placed" if code == PlaceResult.OK else PlaceResult.describe(code)]
+		("removed it" if BuildPhase.is_targeting(ItemDB.get_def(item_id)) else "placed") if code == PlaceResult.OK
+			else PlaceResult.describe(code)]
 	_toast.modulate = Color(0.6, 1.0, 0.6) if code == PlaceResult.OK else Color(1.0, 0.5, 0.45)
 	_toast_left = 2.5
 	_toast.visible = true
 	_last_key = ""
 	_hand_key = ""
+	_target_uid = -1

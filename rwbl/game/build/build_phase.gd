@@ -13,11 +13,21 @@ extends Node
 ## Test hook (CLI, host or client): `--test-place=item@progress,lateral,deg[,slot];item@...` places in order at
 ##   BUILD start (prints `[TEST] PLACE <i> <item> -> <CODE>`). `slot` only on a host without a local player
 ##   (standalone --no-human, default 0); otherwise the local player's slot is used. Then the host places bots.
+## Targeting cards (C17, Demolish): a def with no scene targets a placed item instead of placing. The holder
+##   calls request_demolish(uid); the host checks validate_demolish() and removes the item on every peer
+##   (`[Build] DEMOLISH <uid> by <slot>`, GameEvents.item_removed once per peer); the card is spent like a
+##   placement (hand + cost). The answer comes back as place_result(code, card_id).
+##   Test hook: a `--test-place` entry `demolish@uid[,slot]` demolishes uid; `--test-race-demolish=uid,slot`
+##   tries it on the host once RACE starts (prints `[TEST] RACE DEMOLISH <uid> -> <CODE>`).
 ## Public API: match_setup(m), request_place(item_id, xform), request_done(), place_for_slot(slot, item_id,
-##   xform) -> int, validate(slot, item_id, xform) -> int, remaining_hand(slot), budget_left(slot),
-##   is_finished(slot), items() -> Dictionary uid -> Item, `tuning`, `path`, signal place_result.
+##   xform) -> int, validate(slot, item_id, xform) -> int, request_demolish(uid), demolish_for_slot(slot, uid)
+##   -> int, validate_demolish(slot, uid) -> int, demolish_card(slot), item_at(pos) -> int, static
+##   is_targeting(def), remaining_hand(slot), budget_left(slot), is_finished(slot), items() -> Dictionary
+##   uid -> Item, `tuning`, `path`, signal place_result.
 # CONTRACT: placement RPC is (item_id: StringName, xform: Transform3D); owner = sender's slot on the host.
 # CONTRACT: result codes are PlaceResult.*; spawned items live under MatchMode/Items named "Item<uid>".
+# CONTRACT: demolish RPC is (uid: int); owner = sender's slot on the host. Rejections reuse PlaceResult:
+#   WRONG_PHASE, NOT_IN_HAND (no targeting card left), OVER_BUDGET, UNKNOWN_ITEM (no item with that uid).
 
 ## Requester only: the host's answer to request_place().
 signal place_result(code: int, item_id: StringName)
@@ -70,6 +80,73 @@ func request_done() -> void:
 		_rpc_request_done.rpc_id(1)
 
 
+## Local player: ask the host to remove placed item `uid` with the Demolish card. Answer arrives as place_result.
+func request_demolish(uid: int) -> void:
+	if multiplayer.is_server():
+		var slot := _m.local_slot()
+		var card := demolish_card(slot)
+		place_result.emit(demolish_for_slot(slot, uid), card if card != &"" else &"demolish")
+	else:
+		_rpc_request_demolish.rpc_id(1, uid)
+
+
+## True for cards that target a placed item instead of placing one (Demolish).
+# TODO(C02): switch to `ItemDef.targets_placed` once the head engineer approves the field (C17 handoff).
+static func is_targeting(d: ItemDef) -> bool:
+	return d != null and d.scene == null
+
+
+## The first targeting card `slot` still holds this phase, or &"".
+func demolish_card(slot: int) -> StringName:
+	for id: StringName in remaining_hand(slot):
+		if is_targeting(ItemDB.get_def(id)):
+			return id
+	return &""
+
+
+## Check a demolish without doing it. Order: phase, uid, card, budget. Returns a PlaceResult code.
+func validate_demolish(slot: int, uid: int) -> int:
+	if _m == null or _m.phase != Phase.BUILD:
+		return PlaceResult.WRONG_PHASE
+	if not _items.has(uid) or not is_instance_valid(_items[uid]):
+		return PlaceResult.UNKNOWN_ITEM
+	# TODO(T1): track pieces get their own uids here once they exist; the base track and start line never do.
+	var card := demolish_card(slot) if slot >= 0 else &""
+	if card == &"":
+		return PlaceResult.NOT_IN_HAND
+	if ItemDB.get_def(card).cost > budget_left(slot):
+		return PlaceResult.OVER_BUDGET
+	return PlaceResult.OK
+
+
+## Host: validate and, if OK, remove `uid` on every peer and spend the card. Returns a PlaceResult code.
+func demolish_for_slot(slot: int, uid: int) -> int: # NET: host
+	var code := validate_demolish(slot, uid)
+	if code == PlaceResult.OK:
+		_rpc_demolish.rpc(uid, slot, demolish_card(slot))
+		_check_all_finished.call_deferred()
+	print("[Build] demolish %d by %d -> %s" % [uid, slot, _code_name(code)])
+	return code
+
+
+## uid of the placed item whose footprint covers ground point `pos` (closest centre wins), or -1.
+func item_at(pos: Vector3) -> int:
+	var best := -1
+	var best_d := INF
+	var probe := Transform3D(Basis(), pos)
+	for uid: int in _items:
+		var it: Item = _items[uid]
+		if not is_instance_valid(it) or it.def == null:
+			continue
+		if _footprint_gap(probe, Vector2(0.1, 0.1), it.global_transform, it.def.footprint) > 0.0:
+			continue
+		var d := Vector2(pos.x - it.global_position.x, pos.z - it.global_position.z).length()
+		if d < best_d:
+			best_d = d
+			best = uid
+	return best
+
+
 ## Host: validate and, if OK, spawn on every peer. Returns a PlaceResult code.
 func place_for_slot(slot: int, item_id: StringName, xform: Transform3D) -> int: # NET: host
 	var code := validate(slot, item_id, xform)
@@ -86,7 +163,7 @@ func place_for_slot(slot: int, item_id: StringName, xform: Transform3D) -> int: 
 ## Host: spawn `item_id` for `slot` outside the build rules (crow drops, C12). Returns the uid.
 # FIX(C12, Claude): crows need to spawn items mid-race like a placed item; _rpc_spawn_item is private.
 func spawn_extra(slot: int, item_id: StringName, xform: Transform3D) -> int: # NET: host
-	if not multiplayer.is_server() or ItemDB.get_def(item_id) == null:
+	if not multiplayer.is_server() or ItemDB.get_def(item_id) == null or is_targeting(ItemDB.get_def(item_id)):
 		return -1
 	var uid := _next_uid
 	_next_uid += 1
@@ -101,7 +178,7 @@ func validate(slot: int, item_id: StringName, xform: Transform3D) -> int:
 	if _m == null or _m.phase != Phase.BUILD:
 		return PlaceResult.WRONG_PHASE
 	var d := ItemDB.get_def(item_id)
-	if d == null:
+	if d == null or is_targeting(d): # targeting cards go through validate_demolish()
 		return PlaceResult.UNKNOWN_ITEM
 	if slot < 0 or not remaining_hand(slot).has(item_id):
 		return PlaceResult.NOT_IN_HAND
@@ -164,7 +241,7 @@ func is_finished(slot: int) -> bool:
 	var left := budget_left(slot)
 	for id: StringName in remaining_hand(slot):
 		var d := ItemDB.get_def(id)
-		if d and d.cost <= left:
+		if d and d.cost <= left and (not is_targeting(d) or not _items.is_empty()):
 			return false
 	return true
 
@@ -177,16 +254,28 @@ func items() -> Dictionary:
 # ---------------------------------------------------------------- phase, bots, test hook
 
 func _on_phase_changed(phase: int, _round: int) -> void: # NET: every peer
+	if phase == Phase.RACE and multiplayer.is_server() and NetworkManager.args.has("test-race-demolish"):
+		var a := String(NetworkManager.args["test-race-demolish"]).split(",")
+		var uid := int(a[0])
+		print("[TEST] RACE DEMOLISH %d -> %s" % [uid, _code_name(demolish_for_slot(int(a[1]) if a.size() > 1
+			else 0, uid))])
 	if phase != Phase.BUILD:
 		return
 	_placed.clear()
 	_spent.clear()
 	_done.clear()
+	_prune_items()
 	_ensure_path() # WHY: every peer (clients preview blocks_path items too); ~0.3 s once per match
 	if NetworkManager.args.has("test-place"):
 		_run_test_places.call_deferred()
 	elif multiplayer.is_server():
 		_place_bots.call_deferred()
+
+
+func _prune_items() -> void:
+	for uid: int in _items.keys():
+		if not is_instance_valid(_items[uid]) or (_items[uid] as Node).is_queued_for_deletion():
+			_items.erase(uid)
 
 
 func _ensure_path() -> void:
@@ -207,7 +296,17 @@ func _place_bots() -> void: # NET: host
 		if _m.draft.hand_of(p.slot).is_empty(): # free build: a few random items, not the whole catalogue
 			hand.shuffle()
 			hand = hand.slice(0, tuning.bot_free_items)
+		# WHY: place first, demolish last, so a bot never wastes Demolish on an empty track.
+		hand.sort_custom(func(a: StringName, b: StringName) -> bool:
+			return not is_targeting(ItemDB.get_def(a)) and is_targeting(ItemDB.get_def(b)))
 		for id in hand:
+			if is_targeting(ItemDB.get_def(id)):
+				var target := _bot_target(p.slot)
+				if target >= 0:
+					demolish_for_slot(p.slot, target)
+				else:
+					print("[Build] bot %d has no target for %s" % [p.slot, id])
+				continue
 			var xf: Variant = _bot_spot(p.slot, id)
 			if xf != null:
 				place_for_slot(p.slot, id, xf)
@@ -216,6 +315,23 @@ func _place_bots() -> void: # NET: host
 		_done[p.slot] = true
 		print("[Build] BOT %d placed %d" % [p.slot, (_placed.get(p.slot, []) as Array).size()])
 	_check_all_finished()
+
+
+## Host: the item a bot demolishes: not its own, nearest the leader's racing line (approximated by the
+## centre line, where the leader drives), preferring items in front of the start (lower progress = sooner).
+## -1 if there is none.
+func _bot_target(slot: int) -> int: # NET: host
+	var best := -1
+	var best_score := INF
+	for uid: int in _items:
+		var it: Item = _items[uid]
+		if not is_instance_valid(it) or it.is_queued_for_deletion() or it.owner_slot == slot:
+			continue
+		var score := absf(_m.track.lateral_offset(it.global_position))
+		if score < best_score:
+			best_score = score
+			best = uid
+	return best
 
 
 func _bot_spot(slot: int, id: StringName) -> Variant: # NET: host. Transform3D or null
@@ -246,17 +362,23 @@ func _run_test_places() -> void:
 	var answers: Array[int] = []
 	var on_result := func(code: int, _id: StringName) -> void: answers.append(code)
 	place_result.connect(on_result)
+	if not GameEvents.item_removed.is_connected(_on_test_item_removed):
+		GameEvents.item_removed.connect(_on_test_item_removed)
 	for i in list.size():
 		var parts := list[i].split("@")
 		var nums := parts[1].split(",") if parts.size() > 1 else PackedStringArray()
+		var id := StringName(parts[0])
+		var code: int
+		if is_targeting(ItemDB.get_def(id)) and nums.size() >= 1:
+			code = await _test_demolish(int(nums[0]), int(nums[1]) if nums.size() > 1 else 0, answers, i)
+			print("[TEST] PLACE %d %s -> %s" % [i, id, _code_name(code)])
+			continue
 		if nums.size() < 3:
 			print("[TEST] FAIL bad --test-place entry '%s'" % list[i])
 			continue
 		var t := _m.track.transform_at(float(nums[0]))
 		var xf := Transform3D(t.basis.rotated(Vector3.UP, deg_to_rad(float(nums[2]))),
 			t.origin + t.basis.x * float(nums[1]))
-		var id := StringName(parts[0])
-		var code: int
 		if multiplayer.is_server() and _m.local_slot() < 0:
 			code = place_for_slot(int(nums[3]) if nums.size() > 3 else 0, id, xf)
 		elif multiplayer.is_server():
@@ -271,6 +393,26 @@ func _run_test_places() -> void:
 	place_result.disconnect(on_result)
 	if multiplayer.is_server():
 		_place_bots()
+
+
+## Test hook: demolish `uid` as `slot` (no-human host), the local player (host) or over RPC (client; the
+## answer arrives in `answers[i]` through the place_result listener).
+func _test_demolish(uid: int, slot: int, answers: Array[int], i: int) -> int:
+	if multiplayer.is_server() and _m.local_slot() < 0:
+		return demolish_for_slot(slot, uid)
+	request_demolish(uid)
+	var deadline := Time.get_ticks_msec() + 5000
+	while answers.size() <= i and Time.get_ticks_msec() < deadline:
+		await get_tree().process_frame
+	await get_tree().process_frame # let queue_free run before the gone check
+	var code := answers[i] if answers.size() > i else -1
+	if code == PlaceResult.OK:
+		print("[TEST] ITEM %d gone=%s" % [uid, _m.items_root.get_node_or_null(NodePath("Item%d" % uid)) == null])
+	return code
+
+
+func _on_test_item_removed(uid: int) -> void:
+	print("[TEST] ITEM_REMOVED %d" % uid)
 
 
 func _local_place(id: StringName, xf: Transform3D) -> int: # host with a human slot
@@ -352,6 +494,32 @@ func _rpc_request_place(item_id: StringName, xform: Transform3D) -> void: # NET:
 func _rpc_request_done() -> void: # NET: host
 	if multiplayer.is_server():
 		_mark_done(_m.slot_of_peer(multiplayer.get_remote_sender_id()))
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _rpc_request_demolish(uid: int) -> void: # NET: host
+	if not multiplayer.is_server():
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	var slot := _m.slot_of_peer(sender)
+	var card := demolish_card(slot)
+	var code := demolish_for_slot(slot, uid)
+	_rpc_place_result.rpc_id(sender, code, card if card != &"" else &"demolish")
+
+
+@rpc("authority", "call_local", "reliable")
+func _rpc_demolish(uid: int, slot: int, card: StringName) -> void: # NET: every peer
+	var d := ItemDB.get_def(card)
+	if not _placed.has(slot):
+		_placed[slot] = [] as Array[StringName]
+	(_placed[slot] as Array).append(card)
+	_spent[slot] = int(_spent.get(slot, 0)) + (d.cost if d else 0)
+	var it: Item = _items.get(uid)
+	_items.erase(uid) # WHY: erase before freeing; validate() loops _items typed and a freed one errors
+	if it and is_instance_valid(it):
+		it.queue_free() # surface patches unregister in _exit_tree (C10)
+	print("[Build] DEMOLISH %d by %d" % [uid, slot])
+	GameEvents.item_removed.emit(uid)
 
 
 @rpc("authority", "call_remote", "reliable")
