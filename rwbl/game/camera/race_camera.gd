@@ -1,43 +1,89 @@
 class_name RaceCamera
 extends Camera3D
-## Third-person chase camera behind the target chariot (DESIGN §7). Owner: C05 (v1), C13 polishes
-## (drift sway, boost pullback, build -> race swing).
-## v1: sits behind the chariot's heading (smoothed so it doesn't whip on bumps), looks slightly ahead, FOV widens
-## with speed.
-## NET: local only. Public API: `target` (Node3D to follow; any chariot when spectating).
+## Third-person chase camera behind the target chariot (DESIGN §7). Owner: C05 (v1), C13 (polish).
+## Smoothed heading chase, speed FOV, drift sway from `cart_angle`, boost pullback, shake (Effects.SHAKE and
+## velocity jumps, so clients see hits too), look-ahead into turns.
+## The pose is updated every frame even when not `current`, so the director can swing onto it.
+## NET: local only. Public API: `target`, `tuning`, `snap()`, `fov_for_speed(speed, t)`.
 
 ## What to follow (the local chariot; any chariot when spectating).
 var target: Node3D
-
-const BACK := 9.0 # TUNE: metres behind the chariot
-const UP := 4.5 # TUNE: metres above
-const LOOK_AHEAD := 5.0 # TUNE
-const POS_SMOOTH := 7.0 # TUNE: higher = tighter follow
-const HEADING_SMOOTH := 4.0 # TUNE: how fast the camera swings round behind a turning chariot
-const FOV_MIN := 68.0 # TUNE: degrees at a standstill
-const FOV_MAX := 88.0 # TUNE: degrees at REF_SPEED
-const REF_SPEED := 22.0 # TUNE: m/s that counts as "full speed" for the FOV (default max_speed)
-const FOV_SMOOTH := 3.0 # TUNE
+var tuning: CameraTuning = preload("res://game/camera/default_tuning.tres")
 
 var _heading := Vector3.FORWARD
 var _snap := true
+var _boost := 0.0 # 0..1 smoothed
+var _turn := 0.0 # smoothed signed turn rate, -1..1
+var _shake := 0.0 # hit shake strength 0..1
+var _last_vel := Vector3.ZERO
+var _shake_t := 0.0
+
+
+## Forget smoothing so the next frame lands exactly on the chariot.
+func snap() -> void:
+	_snap = true
+
+
+## FOV for a forward speed (unit-tested).
+static func fov_for_speed(speed: float, t: CameraTuning) -> float:
+	return lerpf(t.fov_min, t.fov_max, clampf(absf(speed) / t.ref_speed, 0.0, 1.0))
 
 
 func _process(delta: float) -> void:
-	if not current or not is_instance_valid(target):
+	if not is_instance_valid(target):
 		_snap = true
 		return
+	var t := tuning
 	var fwd := -target.global_basis.z
 	fwd.y = 0.0
 	fwd = fwd.normalized() if fwd.length_squared() > 0.001 else _heading
 	# WHY: smooth the heading by slerp so a hit-spin of the cart doesn't throw the view around
-	_heading = fwd if _snap else _heading.slerp(fwd, 1.0 - exp(-HEADING_SMOOTH * delta)).normalized()
-	var want := target.global_position - _heading * BACK + Vector3.UP * UP
-	global_position = want if _snap else global_position.lerp(want, 1.0 - exp(-POS_SMOOTH * delta))
-	look_at(target.global_position + _heading * LOOK_AHEAD + Vector3.UP, Vector3.UP)
+	var prev := _heading
+	_heading = fwd if _snap else _heading.slerp(fwd, 1.0 - exp(-t.heading_smooth * delta)).normalized()
+	var yaw_rate := 0.0 # rad/s of how fast the chariot swings away from the camera heading
+	if not _snap and delta > 0.0:
+		yaw_rate = prev.cross(fwd).y * t.heading_smooth
+	_turn = lerpf(_turn, clampf(yaw_rate / 1.5, -1.0, 1.0), 1.0 - exp(-4.0 * delta))
+	var boosting := _is_boosting()
+	_boost = move_toward(_boost, 1.0 if boosting else 0.0, t.boost_smooth * delta)
+	var cart := float(target.get(&"cart_angle")) if target.get(&"cart_angle") != null else 0.0
+	var right := _heading.cross(Vector3.UP)
+	var back := t.back + t.boost_pullback * _boost
+	var want := target.global_position - _heading * back + Vector3.UP * t.up + right * (cart * t.sway_lateral)
+	global_position = want if _snap else global_position.lerp(want, 1.0 - exp(-t.pos_smooth * delta))
+	var look := target.global_position + _heading * t.look_ahead + right * (_turn * t.turn_look) + Vector3.UP
+	look_at(look, Vector3.UP)
+	rotate_object_local(Vector3.BACK, -cart * t.sway_roll)
+	_update_shake(delta)
 	var speed := 0.0
 	if target.has_method(&"get_speed"):
-		speed = absf(float(target.call(&"get_speed")))
-	var want_fov := lerpf(FOV_MIN, FOV_MAX, clampf(speed / REF_SPEED, 0.0, 1.0))
-	fov = want_fov if _snap else lerpf(fov, want_fov, 1.0 - exp(-FOV_SMOOTH * delta))
+		speed = float(target.call(&"get_speed"))
+	var want_fov := fov_for_speed(speed, t) + t.boost_fov * _boost
+	fov = want_fov if _snap else lerpf(fov, want_fov, 1.0 - exp(-t.fov_smooth * delta))
 	_snap = false
+
+
+func _is_boosting() -> bool:
+	if target.has_method(&"has_effect") and target.call(&"has_effect", Effects.BOOST):
+		return true
+	var f: Variant = target.get(&"_flags") # client side: flags from the last snapshot
+	return f != null and (int(f) & ChariotSnapshot.FLAG_BOOSTING) != 0
+
+
+func _update_shake(delta: float) -> void:
+	var t := tuning
+	var vel: Variant = target.get(&"velocity")
+	if vel != null:
+		var v: Vector3 = vel
+		# WHY: `hit` only fires on the host; a sudden velocity change is visible on every peer
+		if not _snap and (v - _last_vel).length() > t.shake_jump_speed:
+			_shake = 1.0
+		_last_vel = v
+	_shake = maxf(0.0, _shake - delta / t.shake_decay)
+	var s := _shake
+	if target.has_method(&"has_effect") and target.call(&"has_effect", Effects.SHAKE):
+		s = maxf(s, clampf(float(target.call(&"effect_strength", Effects.SHAKE)), 0.0, 1.0))
+	if s > 0.0:
+		_shake_t += delta * 40.0
+		var o := Vector3(sin(_shake_t * 1.3), sin(_shake_t * 1.9 + 1.0), 0.0) * (s * t.shake_amount)
+		global_position += global_basis * o
