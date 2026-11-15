@@ -159,9 +159,27 @@ func _run_all() -> void:
 	hit = await _ram(false, func() -> bool: return _a.has_effect(Effects.STUN))
 	_check(hit and _a.has_effect(Effects.STUN) and _a.wheel_state == 0, "horse ram stuns, wheels intact")
 	_check(not _b.has_effect(Effects.STUN), "rammer not stunned")
+	# 4b) Rear-end tap on the cart (same heading): no wheel lost.
+	await _drive(0.6, func() -> bool: return false)
+	_put(_a, Transform3D(Basis.IDENTITY, ZONE))
+	_b.respawn(Transform3D(Basis.IDENTITY, _a.cart_global_position() + Vector3(0, 0, 12)))
+	await _drive(2.5, func() -> bool: return false)
+	_check(_a.wheel_state == 0, "rear-end tap breaks no wheel (%d)" % _a.wheel_state)
+	# 4c) Crawling on no wheels wrecks the chariot after crawl_wreck_time, credited to the last breaker.
+	await _drive(0.6, func() -> bool: return false)
+	_put(_a, Transform3D(Basis.IDENTITY, ZONE))
+	_b.respawn(Transform3D(Basis.IDENTITY, ZONE + Vector3(30, 0, 0)))
+	var kills0 := _kills.size()
+	_a.damage_wheel(ChariotSnapshot.WHEEL_LEFT, 1)
+	_combat._damage(_a, &"cart", _b, _a.cart_global_position() + Vector3(5, 0, 0)) # second wheel by B
+	_check(_a.wheel_state == 3, "crawling")
+	await _drive(_combat.tuning.crawl_wreck_time + 0.3, func() -> bool: return _a.dead)
+	_check(_a.dead and _kills.size() == kills0 + 1 and _kills[-1] == [1, 0, &"wheel"], "crawl wrecks, kill by 1")
+	await _wait_respawn(0, 3.0)
 	# 5) Attribution: own item = self_kill (pit adds the penalty), other's spear = kill, other's item = neither.
+	var kills1 := _kills.size()
 	_a.kill(&"pit", 0, 7)
-	_check(_self_kills.has([0, 7]) and _kills.size() == 1, "own pit = self_kill only")
+	_check(_self_kills.has([0, 7]) and _kills.size() == kills1, "own pit = self_kill only")
 	t = await _wait_respawn(0, 3.0)
 	var pit_t := _combat.tuning.respawn_delay + _combat.tuning.pit_penalty
 	_check(t > pit_t - 0.1 and t < 3.0, "pit respawn %.2f s (delay + penalty %.2f, < 3)" % [t, pit_t])

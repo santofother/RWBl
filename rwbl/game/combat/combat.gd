@@ -4,7 +4,9 @@ extends Node
 ## Rams (host): on `Chariot.hit` between two chariots, the one with more mass × speed along the impact wins
 ##   (by `win_margin`). Loser's cart hit → `damage_wheel(side, winner)` (side from the impact point; a cart
 ##   with no wheels left dies, cause &"wheel"). Loser's horses hit → `stun(horse_stun)`. Each pair is immune
-##   for `pair_immunity` s afterwards, so one scrape is one hit.
+##   for `pair_immunity` s afterwards, so one scrape is one hit. Only side-on cart hits (`side_hit_min`) break
+##   wheels, so rear-end taps don't punish the leader. Crawling on no wheels for `crawl_wreck_time` s wrecks the
+##   chariot (kill &"wheel", credited to whoever broke the last wheel) so it respawns.
 ## Deaths (host): forwards `Chariot.died` to GameEvents (chariot_died; kill when another player caused it
 ##   without an item; self_kill for an item the victim placed). Respawn after `respawn_delay` (+ `pit_penalty`
 ##   for &"pit") at `track.respawn_transform(death progress − respawn_back)`, then `chariot_respawned`.
@@ -49,6 +51,7 @@ var _chariots: Dictionary = {} # slot -> Chariot
 var _prev_vel: Dictionary = {} # slot -> velocity before this tick's steps (host)
 var _pair_cd: Dictionary = {} # "a:b" -> seconds of immunity left (host)
 var _respawn_at: Dictionary = {} # slot -> _time to respawn (host)
+var _crawl: Dictionary = {} # slot -> [seconds on no wheels, last wheel breaker] (host)
 var _death_progress: Dictionary = {} # slot -> track progress at death (host)
 var _crows: Dictionary = {} # slot -> true (all peers)
 var _crow_ready_at: Dictionary = {} # slot -> _time of the next allowed drop (all peers, own clock)
@@ -144,10 +147,19 @@ func _physics_process(delta: float) -> void:
 		return
 	for slot: int in _chariots.keys():
 		var c: Chariot = _chariots[slot]
-		if is_instance_valid(c):
-			_prev_vel[slot] = c.velocity
-		else:
+		if not is_instance_valid(c):
 			_chariots.erase(slot)
+			continue
+		_prev_vel[slot] = c.velocity
+		if c.wheel_state == BOTH_WHEELS and not c.dead and not c.frozen:
+			var cr: Array = _crawl.get(slot, [0.0, -1])
+			cr[0] = float(cr[0]) + delta
+			_crawl[slot] = cr
+			if cr[0] >= tuning.crawl_wreck_time: # WHY: a crawl lasts "until respawn"; never sideline anyone for long
+				_crawl.erase(slot)
+				c.kill(&"wheel", int(cr[1]))
+		elif _crawl.has(slot) and c.wheel_state != BOTH_WHEELS:
+			_crawl.erase(slot)
 	for k: String in _pair_cd.keys():
 		_pair_cd[k] = float(_pair_cd[k]) - delta
 		if _pair_cd[k] <= 0.0:
@@ -203,12 +215,19 @@ func _damage(loser: Chariot, part: StringName, winner: Chariot, from: Vector3) -
 			loser.kill(&"wheel", winner.slot)
 		else:
 			var cart := loser.get_node(^"Cart") as Node3D
-			var right := (from - loser.cart_global_position()).dot(cart.global_basis.x) > 0.0
+			var to := from - loser.cart_global_position()
+			to.y = 0.0
+			if absf(to.normalized().dot(cart.global_basis.x)) < tuning.side_hit_min:
+				print("[Combat] RAM %d > %d cart glancing" % [winner.slot, loser.slot])
+				return
+			var right := to.dot(cart.global_basis.x) > 0.0
 			var side := ChariotSnapshot.WHEEL_RIGHT if right else ChariotSnapshot.WHEEL_LEFT
 			if loser.wheel_state & side:
 				side = BOTH_WHEELS & ~side
 			what = "wheel_%s" % ("right" if side == ChariotSnapshot.WHEEL_RIGHT else "left")
 			loser.damage_wheel(side, winner.slot)
+			if loser.wheel_state == BOTH_WHEELS:
+				_crawl[loser.slot] = [0.0, winner.slot]
 	else:
 		what = "stun"
 		loser.stun(tuning.horse_stun, winner.slot)

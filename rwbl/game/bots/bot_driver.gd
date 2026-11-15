@@ -66,6 +66,13 @@ func compute_input(chariot: Chariot, track: Track, delta: float) -> ChariotInput
 	var target := track.point_at(p + look) + right * _offset
 	var local := chariot.global_transform.affine_inverse() * target
 	_out.steer = clampf(atan2(local.x, -local.z) * t.steer_gain, -1.0, 1.0)
+	# FIX(C12, Claude): one wheel lost (C12 rams) cuts steering and pulls to a side; counter-steer like a human,
+	# or a limping bot can't make the corners and drops far behind.
+	var w := chariot.wheel_state
+	if w == ChariotSnapshot.WHEEL_LEFT or w == ChariotSnapshot.WHEEL_RIGHT:
+		var ct := chariot.tuning
+		var pull := -ct.limp_pull if w == ChariotSnapshot.WHEEL_LEFT else ct.limp_pull
+		_out.steer = clampf((_out.steer - pull) / maxf(ct.limp_steer_mult, 0.1), -1.0, 1.0)
 
 	# Curvature ahead -> wanted speed.
 	var curve := _max_curve(track, p, t.preview)

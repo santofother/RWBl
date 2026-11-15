@@ -11,9 +11,11 @@ extends Resource
 @export_range(0.0, 3.0) var horse_stun := 0.8 # TUNE: s, loser's horses were hit
 @export_range(0.0, 2.0) var pair_immunity := 0.5 # TUNE: s, same two chariots can't trade hits again sooner
 @export_range(1.0, 3.0) var win_margin := 1.1 # TUNE: winner's mass x speed must beat the loser's by this factor
+@export_range(0.0, 1.0) var side_hit_min := 0.5 # TUNE: cart hits break a wheel only this side-on (|cos| to the axle); rear-end taps don't
+@export_range(1.0, 15.0) var crawl_wreck_time := 4.0 # TUNE: s crawling on no wheels before the chariot wrecks and respawns
 @export_group("Respawn")
-@export_range(0.3, 3.0) var respawn_delay := 1.5 # TUNE: s dead before respawn (DESIGN: back in < 3 s)
-@export_range(0.0, 1.4) var pit_penalty := 1.0 # TUNE: extra s after a pit death (keep delay + this < 3)
+@export_range(0.3, 3.0) var respawn_delay := 2.0 # TUNE: s dead before respawn (DESIGN: back in < 3 s)
+@export_range(0.0, 0.95) var pit_penalty := 0.8 # TUNE: extra s after a pit death (keep delay + this < 3)
 @export_range(0.0, 40.0) var respawn_back := 10.0 # TUNE: m behind the death spot along the track
 @export_group("Crow")
 @export_range(1.0, 30.0) var crow_drop_cooldown := 8.0 # TUNE: s between a crow's mud drops
