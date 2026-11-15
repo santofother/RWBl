@@ -1,0 +1,60 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://game/items/scenes/surface_item.gd" id="1"]
+
+[sub_resource type="StandardMaterial3D" id="m0"]
+albedo_color = Color(0.05, 0.04, 0.06, 1)
+roughness = 0.05
+metallic = 0.6
+
+[sub_resource type="BoxMesh" id="r1"]
+size = Vector3(4, 0.05, 5)
+
+[sub_resource type="CylinderMesh" id="r2"]
+top_radius = 0.7
+bottom_radius = 0.7
+height = 0.06
+
+[sub_resource type="CylinderMesh" id="r3"]
+top_radius = 0.9
+bottom_radius = 0.9
+height = 0.06
+
+[sub_resource type="CylinderMesh" id="r4"]
+top_radius = 0.6
+bottom_radius = 0.6
+height = 0.06
+
+[sub_resource type="BoxShape3D" id="r5"]
+size = Vector3(4, 2, 5)
+
+[node name="OilSlick" type="Node3D"]
+script = ExtResource("1")
+surface = &"oil"
+lock_steer = false
+
+[node name="Mesh" type="MeshInstance3D" parent="."]
+mesh = SubResource("r1")
+surface_material_override/0 = SubResource("m0")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.025, 0)
+
+[node name="Blob0" type="MeshInstance3D" parent="."]
+mesh = SubResource("r2")
+surface_material_override/0 = SubResource("m0")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.9, 0.03, 1.5)
+
+[node name="Blob1" type="MeshInstance3D" parent="."]
+mesh = SubResource("r3")
+surface_material_override/0 = SubResource("m0")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.8, 0.03, -2)
+
+[node name="Blob2" type="MeshInstance3D" parent="."]
+mesh = SubResource("r4")
+surface_material_override/0 = SubResource("m0")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0.03, -2.4)
+
+[node name="Trigger" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+
+[node name="Shape" type="CollisionShape3D" parent="Trigger"]
+shape = SubResource("r5")

@@ -1,0 +1,31 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://game/items/scenes/surface_item.gd" id="1"]
+
+[sub_resource type="StandardMaterial3D" id="m0"]
+transparency = 1
+albedo_color = Color(0.72, 0.9, 1, 0.85)
+roughness = 0.05
+metallic = 0.1
+
+[sub_resource type="BoxMesh" id="r1"]
+size = Vector3(5, 0.05, 6)
+
+[sub_resource type="BoxShape3D" id="r2"]
+size = Vector3(5, 2, 6)
+
+[node name="IceSheet" type="Node3D"]
+script = ExtResource("1")
+surface = &"ice"
+lock_steer = true
+
+[node name="Mesh" type="MeshInstance3D" parent="."]
+mesh = SubResource("r1")
+surface_material_override/0 = SubResource("m0")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.025, 0)
+
+[node name="Trigger" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+
+[node name="Shape" type="CollisionShape3D" parent="Trigger"]
+shape = SubResource("r2")
