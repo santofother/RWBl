@@ -10,7 +10,7 @@ wait_peers 120 || { echo "ITEMS TEST FAILED (peer exit/timeout, see $OUT)"; grep
 fail=0
 grep -E '^\[(TEST|Item)\]' "$OUT/items.log"
 assert_log items '^\[TEST\] ITEMS PASSED' || fail=1
-for id in oil_slick mud_patch ice_sheet speed_pad ramp column swinging_axe pit; do
+for id in oil_slick mud_patch ice_sheet speed_pad ramp column swinging_axe pit bumper lion_dung catapult whirlwind spike_log; do
     assert_log items "^\[Item\] HIT $id 0\$" || fail=1
 done
 assert_log items '^\[Item\] INTERACT slide_far ' || fail=1

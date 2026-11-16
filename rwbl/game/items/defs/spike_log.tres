@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="ItemDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://game/common/item_def.gd" id="1"]
+[ext_resource type="PackedScene" path="res://game/items/scenes/spike_log.tscn" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"spike_log"
+display_name = "Spiked Log"
+description = "Spinning spiked log. Touch it and you die."
+rarity = 2
+category = 1
+tags = Array[StringName]([])
+footprint = Vector2(5.5, 5.5)
+blocks_path = false
+scene = ExtResource("2")

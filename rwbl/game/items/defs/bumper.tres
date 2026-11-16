@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="ItemDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://game/common/item_def.gd" id="1"]
+[ext_resource type="PackedScene" path="res://game/items/scenes/bumper.tscn" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"bumper"
+display_name = "Bouncy Bumper"
+description = "Pinball bumper: shoves chariots away."
+rarity = 0
+category = 1
+tags = Array[StringName]([])
+footprint = Vector2(3, 3)
+blocks_path = false
+scene = ExtResource("2")
