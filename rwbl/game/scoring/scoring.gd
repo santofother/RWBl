@@ -126,8 +126,15 @@ func score_round(finish_order: Array) -> void: # NET: host only
 		if not _clean_pass(uid):
 			grief[uid] = true
 			print("[Score] GRIEF item %d" % uid)
+	# User (C21 session): if everyone crashed out, nobody finished: points by how far you got. The order is by
+	# distance; each racer gets that place's points times the share of the course covered.
+	var by_distance := _m != null and _m.race.all_crashed()
 	for s in _slots:
 		var fin: int = table.finish_points(int(_finish_place[s])) if _finish_place.has(s) else 0
+		if by_distance and not _finish_place.has(s) and finish_order.has(s):
+			var share := clampf(_m.race.progress_of(s) / maxf(_m.track.length(), 1.0), 0.0, 1.0)
+			fin = roundi(table.finish_points(finish_order.find(s) + 1) * share)
+			print("[Score] DISTANCE %d place=%d share=%.2f -> %d" % [s, finish_order.find(s) + 1, share, fin])
 		var traps := 0
 		for uid: int in _hits:
 			if grief.has(uid) or not _items.has(uid) or int(_items[uid]["owner"]) != s:

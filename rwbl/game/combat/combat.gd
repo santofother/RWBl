@@ -11,7 +11,9 @@ extends Node
 ##   without an item; self_kill for an item the victim placed). Respawn after `respawn_delay` (+ `pit_penalty`
 ##   for &"pit") at `track.respawn_transform(death progress − respawn_back)`, then `chariot_respawned`.
 ##   C24 (user): during a race the dead chariot also waits until another racer's progress has reached its death
-##   spot (`respawn_wait_for_pass`), at most `respawn_wait_max` s after dying. Every peer can read the wait with
+##   spot (`respawn_wait_for_pass`); no time cap since the C21 session (`respawn_wait_max` 0, user). If every racer
+##   still out is crashed and nobody can pass anyone's spot, everyone_stuck() is true and the race ends (host).
+##   Every peer can read the wait with
 ##   respawn_wait(slot) (HUD). If a rival's pass released you, you respawn `respawn_rival_gap` m behind that rival
 ##   in its lane (`respawn_behind_rival`, user request in the C21 session).
 ## Crow (all peers know who): a slot that finished the race, or died with < `crow_death_time_left` s of race
@@ -99,7 +101,7 @@ func register_chariot(slot: int, node: Node3D) -> void:
 
 
 ## While `slot` is dead in a race and waits for a rival to pass its death spot: {"progress": m along the course,
-## "max_at": NetClock time it respawns anyway}. Empty otherwise. Every peer (C24).
+## "max_at": NetClock time it respawns anyway, or -1 = no cap}. Empty otherwise. Every peer (C24).
 func respawn_wait(slot: int) -> Dictionary:
 	return _waits.get(slot, {})
 
@@ -259,13 +261,14 @@ func _on_died(cause: StringName, source_slot: int, item_uid: int, slot: int) -> 
 	if c and track:
 		_death_progress[slot] = track.progress_at(c.global_position)
 	var crow := _m != null and _m.phase == Phase.RACE and _m.phase_time_left() < tuning.crow_death_time_left
+	_died_at[slot] = _time # C21 session: crows too (a pass only counts from someone who crashed later)
 	if crow:
 		set_crow(slot, true)
 	else:
 		_respawn_at[slot] = _time + tuning.respawn_delay + (tuning.pit_penalty if cause == &"pit" else 0.0)
-		_died_at[slot] = _time
 		if _waits_for_pass():
-			_rpc_wait.rpc(slot, float(_death_progress.get(slot, 0.0)), NetClock.now() + tuning.respawn_wait_max)
+			var cap := NetClock.now() + tuning.respawn_wait_max if tuning.respawn_wait_max > 0.0 else -1.0
+			_rpc_wait.rpc(slot, float(_death_progress.get(slot, 0.0)), cap)
 	print("[Combat] DIED %d %s by %d item %d%s" % [slot, cause, source_slot, item_uid, " -> crow" if crow else ""])
 
 
@@ -273,7 +276,7 @@ func _on_died(cause: StringName, source_slot: int, item_uid: int, slot: int) -> 
 func _may_respawn(slot: int) -> bool:
 	if not _waits.has(slot) or not _waits_for_pass():
 		return true
-	if _time - float(_died_at.get(slot, _time)) >= tuning.respawn_wait_max:
+	if tuning.respawn_wait_max > 0.0 and _time - float(_died_at.get(slot, _time)) >= tuning.respawn_wait_max:
 		return true
 	var at := float(_death_progress.get(slot, 0.0))
 	var others := 0
@@ -285,12 +288,36 @@ func _may_respawn(slot: int) -> bool:
 		others += 1
 		if _m.race.is_finished(p.slot):
 			released = true
-		elif _m.race.progress_of(p.slot) >= at:
+			continue
+		# C21 session (user): a wreck that was already lying ahead when you crashed never "passed" you; only a rival
+		# that got past your spot alive counts (still alive, or crashed after you).
+		var rc: Chariot = _chariots.get(p.slot)
+		if rc and rc.dead and float(_died_at.get(p.slot, -INF)) <= float(_died_at.get(slot, 0.0)):
+			continue
+		if _m.race.progress_of(p.slot) >= at:
 			released = true
 			if _m.race.progress_of(p.slot) < best: # the one that just passed = the nearest past the spot
 				best = _m.race.progress_of(p.slot)
 				_passer[slot] = p.slot
 	return released or others == 0
+
+
+## User (C21 session): true while racing when nobody left can pass anyone: every racer that hasn't finished is
+## dead and either a crow or waiting for a pass that no rival has made. RaceController ends the race then. NET: host
+func everyone_stuck() -> bool:
+	if not _waits_for_pass():
+		return false
+	var out := 0
+	for p in _m.players:
+		if _m.race.is_finished(p.slot):
+			continue
+		var c: Chariot = _chariots.get(p.slot)
+		if c == null or not c.dead:
+			return false
+		if not is_crow(p.slot) and (not _waits.has(p.slot) or _may_respawn(p.slot)):
+			return false # still coming back
+		out += 1
+	return out > 0
 
 
 func _waits_for_pass() -> bool: # NET: host

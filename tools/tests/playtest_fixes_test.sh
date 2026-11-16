@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# C24 playtest fixes. (1) unit: respawn waits for a rival to pass (max-wait cap), race cut after every human
+# C24 playtest fixes. (1) unit: respawn waits for a rival to pass (no time cap since C21), race cut after every human
 # finished, spectate after finishing, no free items without a drafted card, clean item ghosts.
 # (2) LAN host + client: the client gets its own draft cards, and the host sees the client's build cursor and
 # the card it holds (--test-cursor).

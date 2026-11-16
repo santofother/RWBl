@@ -7,7 +7,10 @@ extends Node
 ## clients by RPC at STATE_HZ so `progress_of()` / `place_of()` / `is_finished()` read the same on every peer.
 ## Public API: match_setup(m), progress_of(slot), lap_of(slot) (always 1), place_of(slot), is_finished(slot),
 ##   finish_time_of(slot), race_time(), countdown_left(), is_racing(), finish_order(), notify_teleport(slot),
-##   to_go(slot) (m left to the finish line), cut_time() (C24).
+##   to_go(slot) (m left to the finish line), cut_time() (C24), all_crashed() (C21 session).
+## User (C21 session): when every racer still out is crashed and nobody can pass anyone's crash spot
+##   (Combat.everyone_stuck()), the race ends at once (`[Race] ALL CRASHED`). Order = by distance; nobody finished,
+##   so nobody wins the round (MatchMode); Scoring gives distance points. all_crashed() is true on every peer then.
 ## C24 (user): once every human has finished, the race ends `MatchTuning.race_end_after_humans` s later even if
 ##   bots are still driving (`[Race] HUMANS DONE cut=<s>`); cut_time() is that NetClock time on every peer.
 ## Logs: `[Race] Start`, `[Race] GO`, `[Race] CLEAN slot`, `[Race] FINISH slot place time`, `[Race] OVER ...`.
@@ -43,6 +46,7 @@ var _hooked: Dictionary = {} # slot -> true once the `hit` signal is connected
 var _sync_accum := 0.0
 var _dead_since: Dictionary = {} # slot -> NetClock time it was seen dead
 var _cut_at := -1.0 # NetClock time the race is cut short after every human finished (all peers), -1 = none
+var _all_crashed := false # C21 session: the race ended because nobody left could pass (all peers)
 
 
 ## Called by MatchMode.setup() on every peer.
@@ -60,6 +64,7 @@ func _on_phase_changed(phase: int, _round: int) -> void:
 	_over = false
 	_end_at = -1.0
 	_cut_at = -1.0
+	_all_crashed = false
 	_order.clear()
 	_state.clear()
 	if not multiplayer.is_server():
@@ -103,6 +108,10 @@ func _physics_process(_delta: float) -> void:
 			_end_race()
 			_end_at = now
 		elif _cut_at >= 0.0 and now >= _cut_at:
+			_end_race()
+		elif _m.combat and _m.combat.everyone_stuck():
+			_rpc_all_crashed.rpc()
+			print("[Race] ALL CRASHED")
 			_end_race()
 		elif _cut_at < 0.0 and _humans_done():
 			_rpc_cut.rpc(minf(now + _m.tuning.race_end_after_humans, _m.phase_end_time - 0.2))
@@ -166,6 +175,11 @@ func is_racing() -> bool:
 ## Slots that finished, in order (host; clients see `is_finished` / `place_of`).
 func finish_order() -> Array[int]:
 	return _order
+
+
+## True once the race ended because every racer still out was crashed and stuck (C21 session). Every peer.
+func all_crashed() -> bool:
+	return _all_crashed
 
 
 ## NetClock time the race will be cut short because every human finished, or -1. Every peer (C24).
@@ -268,6 +282,11 @@ func _humans_done() -> bool: # NET: host. At least one human and every human fin
 @rpc("authority", "call_local", "reliable")
 func _rpc_cut(at: float) -> void: # NET: every peer
 	_cut_at = at
+
+
+@rpc("authority", "call_local", "reliable")
+func _rpc_all_crashed() -> void: # NET: every peer
+	_all_crashed = true
 
 
 # ---------------------------------------------------------------- HUD sync

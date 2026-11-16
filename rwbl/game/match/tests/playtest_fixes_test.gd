@@ -1,7 +1,7 @@
 extends Node
 ## C24 headless unit test (run by tools/tests/playtest_fixes_test.sh). Owner: C24.
 ## A match.tscn with the local human (slot 0) and 2 bots, straight into the Race phase. Checks: a crash waits for
-## a rival to pass the crash spot (and the max-wait cap), the race is cut short once every human finished, the
+## a rival to pass the crash spot (no time cap since C21), the race is cut short once every human finished, the
 ## camera spectates after finishing, Build gives nothing without a drafted card, item ghosts carry no scripts or
 ## collisions. Prints `[TEST] ok|FAIL <what>` then `[TEST] C24 PASSED|FAILED`. NET: offline only.
 
@@ -47,17 +47,20 @@ func _ready() -> void:
 		and absf(t.lateral_offset(c0.global_position) - t.lateral_offset(c1.global_position)) < 1.0,
 		"respawned %.1f m behind the rival that passed, same lane" % (t.progress_at(c1.global_position)
 		- t.progress_at(c0.global_position)))
-	# 2) nobody ever passes: respawn_wait_max caps it
+	# 2) FIX(C21, Claude): user: no timed auto-respawn (was: respawn_wait_max caps it). Nobody passes -> still out.
 	c0.respawn(t.transform_at(320.0))
 	m.race.notify_teleport(0)
 	await get_tree().physics_frame
 	c0.kill(&"fall")
+	await get_tree().create_timer(10.0).timeout
+	_check(c0.dead and m.phase == Phase.RACE, "no timed respawn: still out after 10 s, race goes on (rivals alive)")
+	c1.respawn(t.transform_at(325.0))
+	m.race.notify_teleport(1)
+	c1.frozen = true
 	var t0 := Time.get_ticks_msec()
-	while c0.dead and Time.get_ticks_msec() - t0 < 15000:
+	while c0.dead and Time.get_ticks_msec() - t0 < 3000:
 		await get_tree().physics_frame
-	var waited := (Time.get_ticks_msec() - t0) * 0.001
-	var cap := m.combat.tuning.respawn_wait_max
-	_check(not c0.dead and waited > cap - 0.5 and waited < cap + 1.0, "max wait %.1f s (cap %.1f)" % [waited, cap])
+	_check(not c0.dead, "back in once the rival passed")
 	# 3) the only human finishes: race is cut short, camera spectates
 	c0.frozen = false
 	var ft := t.transform_at(t.finish_progress() - 4.0)

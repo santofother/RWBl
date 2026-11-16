@@ -495,7 +495,10 @@ func _race_notice(slot: int, ch: Chariot) -> String:
 	if ch and ch.dead:
 		var w := _m.combat.respawn_wait(slot)
 		if not w.is_empty():
-			lines.append("CRASHED! Back in when a rival passes your spot (max %d s)" % ceili(maxf(0.0, float(w["max_at"]) - now)))
+			if float(w["max_at"]) > 0.0:
+				lines.append("CRASHED! Back in when a rival passes your spot (max %d s)" % ceili(maxf(0.0, float(w["max_at"]) - now)))
+			else: # C21 session (user): no timed respawn
+				lines.append("CRASHED! Back in when a rival passes your spot")
 		elif not _m.combat.is_crow(slot):
 			lines.append("CRASHED! Respawning...")
 	var cams := _m.cameras
@@ -505,6 +508,8 @@ func _race_notice(slot: int, ch: Chariot) -> String:
 			"  ·  V: your chariot" if _m.race.is_finished(slot) else ""])
 	elif _m.race.is_finished(slot):
 		lines.append("V: spectate the others")
+	if _m.race.all_crashed(): # C21 session (user)
+		lines.append("Everyone crashed! Round over: no winner, points by how far you got")
 	var cut := _m.race.cut_time()
 	if cut >= 0.0 and _m.race.is_racing():
 		lines.append("Race ends in %d s" % ceili(maxf(0.0, cut - now)))
