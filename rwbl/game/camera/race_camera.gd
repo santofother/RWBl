@@ -39,7 +39,10 @@ func _process(delta: float) -> void:
 	fwd = fwd.normalized() if fwd.length_squared() > 0.001 else _heading
 	# WHY: smooth the heading by slerp so a hit-spin of the cart doesn't throw the view around
 	var prev := _heading
-	_heading = fwd if _snap else _heading.slerp(fwd, 1.0 - exp(-t.heading_smooth * delta)).normalized()
+	# FIX(C24, Claude): slerp between near-opposite or near-equal vectors errors ("axis must be normalized"); just take fwd.
+	var d := _heading.dot(fwd)
+	var flip := d < -0.999 or d > 0.99999
+	_heading = fwd if _snap or flip else _heading.slerp(fwd, 1.0 - exp(-t.heading_smooth * delta)).normalized()
 	var yaw_rate := 0.0 # rad/s of how fast the chariot swings away from the camera heading
 	if not _snap and delta > 0.0:
 		yaw_rate = prev.cross(fwd).y * t.heading_smooth
