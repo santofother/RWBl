@@ -4,6 +4,8 @@ extends RefCounted
 ## player's keyboard would (DESIGN §11 Q6). Owner: C06.
 ## Follows the centre line with speed-based look-ahead (C23: stops after the finish line), brakes for curvature ahead, whips on straights, keeps a
 ## lateral offset around other chariots and `blocks_path` items, and reverses out when stuck.
+## C21 loops: from `loop_prep` m before a loop it goes flat out (no braking for the loop's "curvature") and whips;
+## inside the loop it holds full throttle and doesn't steer.
 ## Uses only public APIs of Chariot, Track, Item, so C04/C05 changes don't break it.
 ## NET: host only. Public API: `compute_input(chariot, track, delta) -> ChariotInput`, `tuning`, `seed_slot(slot)`,
 ##   `stuck_count`.
@@ -64,6 +66,10 @@ func compute_input(chariot: Chariot, track: Track, delta: float) -> ChariotInput
 		_last_progress = p
 		return _out
 	_track_stuck(chariot, p, length, speed, delta)
+	if chariot.on_loop: # C21: committed, just keep the horses pulling
+		_out.throttle = 1.0
+		return _out
+	var to_loop := _loop_ahead(track, p)
 
 	var t := tuning
 	var look := t.look_base + speed * t.look_speed
@@ -81,7 +87,7 @@ func compute_input(chariot: Chariot, track: Track, delta: float) -> ChariotInput
 		_out.steer = clampf((_out.steer - pull) / maxf(ct.limp_steer_mult, 0.1), -1.0, 1.0)
 
 	# Curvature ahead -> wanted speed.
-	var curve := _max_curve(track, p, t.preview)
+	var curve := _max_curve(track, p, minf(t.preview, maxf(to_loop - 2.0, 4.0)))
 	var lat := t.corner_lat_accel * _skill * (0.8 + 0.4 * t.aggression)
 	var want := clampf(sqrt(lat / maxf(curve, 0.0005)), t.min_corner_speed, 60.0)
 	if _patch_ahead: # WHY: no lane is clean, so cross the patch slowly instead of sliding through at full speed
@@ -89,12 +95,29 @@ func compute_input(chariot: Chariot, track: Track, delta: float) -> ChariotInput
 	_out.throttle = 1.0 if speed < want else 0.0
 	_out.brake = 1.0 if speed > want + t.brake_margin else 0.0
 
+	if to_loop < t.loop_prep: # C21: hit the loop as fast as possible
+		_out.throttle = 1.0
+		_out.brake = 0.0
+		_whip_wait -= delta
+		if _whip_wait <= 0.0 and chariot.stamina > t.loop_whip_stamina and not chariot.has_effect(Effects.BOOST):
+			_out.press_whip()
+			_whip_wait = 0.5
+		return _out
+
 	_whip_wait -= delta
 	if _whip_wait <= 0.0 and chariot.stamina > t.whip_stamina and curve < t.whip_max_curve \
 			and speed >= want - 0.5 and _out.brake == 0.0:
 		_out.press_whip()
 		_whip_wait = 0.7 + (1.0 - t.aggression) * 1.5
 	return _out
+
+
+## m from `p` to the start of the next loop (INF if none ahead).
+func _loop_ahead(track: Track, p: float) -> float:
+	for z: Vector2 in track.loop_zones():
+		if z.y >= p:
+			return maxf(z.x - p, 0.0)
+	return INF
 
 
 func _track_stuck(chariot: Chariot, p: float, length: float, speed: float, delta: float) -> void:

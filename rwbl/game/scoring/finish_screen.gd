@@ -3,9 +3,11 @@ extends CanvasLayer
 ## Personal finish card: when the local player crosses the finish line it shows "VICTORY!" / "FINISHED!", the
 ## place, race time, place points and the bonus earned so far (laps, clean laps, kills, traps), then "waiting for
 ## the others" with the race time left. Hidden when the Score phase starts (ScoreScreen shows the full table).
-## Owner: C11 (added by C12 on the user's request).
+## Owner: C11 (added by C12 on the user's request). User request (C21 session): while you spectate the others
+## the card shrinks into the top-right corner (compact) so it doesn't cover the view; back in the middle with V.
 ## NET: local only. Fed by Scoring.finish_card (host RPC on every peer).
-## Public API: match_setup(m, scoring), show_card(place, time, finish_pts, bonus_pts), texts() -> Dictionary.
+## Public API: match_setup(m, scoring), show_card(place, time, finish_pts, bonus_pts), set_compact(on),
+##   texts() -> Dictionary (+ "compact").
 
 const THEME_RES := preload("res://game/hud/hud_theme.tres")
 const GOLD := Color(1.0, 0.82, 0.25)
@@ -16,6 +18,10 @@ var _title: Label
 var _place: Label
 var _points: Label
 var _wait: Label
+var _panel: PanelContainer
+var _compact := false
+const SIZES := [72, 44, 34, 26] # TUNE: title, place, points, wait font sizes (centred card)
+const COMPACT_SIZES := [34, 22, 18, 16] # TUNE: same, in the corner while spectating
 
 
 ## Called by Scoring.match_setup() on every peer.
@@ -33,9 +39,7 @@ func _ready() -> void:
 	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_root)
 	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_panel = panel
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(panel)
 	var box := VBoxContainer.new()
@@ -47,11 +51,14 @@ func _ready() -> void:
 	_wait = _label(26, Color(0.8, 0.8, 0.8))
 	for l in [_title, _place, _points, _wait]:
 		box.add_child(l)
+	_layout()
 	visible = false
 
 
 func _process(_delta: float) -> void:
 	if visible and _m:
+		var cams: Variant = _m.get(&"cameras")
+		set_compact(cams != null and is_instance_valid(cams) and (cams as CameraDirector).spectating_other())
 		_wait.text = "Waiting for the others... %d s" % ceili(maxf(0.0, _m.phase_time_left()))
 
 
@@ -65,9 +72,34 @@ func show_card(place: int, time: float, finish_pts: int, bonus_pts: int) -> void
 	print("[Score] FINISH_CARD place=%d finish=%d bonus=%d" % [place, finish_pts, bonus_pts])
 
 
+## Small card in the top-right corner (true) or the big one in the middle (false).
+func set_compact(on: bool) -> void:
+	if on != _compact:
+		_compact = on
+		_layout()
+
+
 ## What is on screen (tests).
 func texts() -> Dictionary:
-	return {"visible": visible, "title": _title.text, "place": _place.text, "points": _points.text}
+	return {"visible": visible, "title": _title.text, "place": _place.text, "points": _points.text,
+		"compact": _compact}
+
+
+func _layout() -> void:
+	var sizes: Array = COMPACT_SIZES if _compact else SIZES
+	var labels := [_title, _place, _points, _wait]
+	for i in labels.size():
+		(labels[i] as Label).add_theme_font_size_override(&"font_size", int(sizes[i]))
+	_panel.reset_size() # WHY: shrink to the new text size before re-anchoring
+	if _compact:
+		_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 24)
+		_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+		_panel.grow_vertical = Control.GROW_DIRECTION_END
+		_panel.offset_top = 90 # below the phase timer row
+	else:
+		_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE)
+		_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
 
 
 func _label(size: int, color: Color) -> Label:

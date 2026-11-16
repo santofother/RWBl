@@ -13,8 +13,13 @@ extends Node3D
 ## (C07). Never moved by stock RigidBody3D physics. step() never reads Input and has no RPCs.
 ## Public API:
 ## Jump (input.jump): hop ~1 m on a cooldown for a little stamina; steering is weak (`air_steer`) in the air.
+## Loops (C21): inside a Track loop zone the chariot rides the road surface (surface gravity, `on_loop`): position
+##   = road point at its progress + lateral offset, basis = road frame (upside down at the top), speed from the
+##   usual thrust/drag plus `loop_slope_gravity` along the climb; steering only slides it sideways. Slower than
+##   `loop_min_speed` with the road past ~70° (overhead) it falls off, tumbles and dies on landing (cause
+##   &"loop_fall"). Leaving the zone puts it back on flat-road physics. The cart pitches to follow the road.
 ##   vars `slot`, `tuning`, `track`, `velocity`, `stamina`, `wheel_state`, `dead`, `frozen`, `cart_angle`,
-##   `cart_ang_vel`, `grounded`, `surface`
+##   `cart_ang_vel`, `grounded`, `surface`, `on_loop` (C21)
 ##   step(input, delta), get_snapshot(), apply_snapshot(s), get_speed(), get_forward(), cart_global_position()
 ##   add_effect(effect, duration, strength, source_slot), has_effect(effect), effect_strength(effect),
 ##   apply_impulse(impulse), damage_wheel(side, source_slot), stun(duration, source_slot),
@@ -51,6 +56,8 @@ const FALL_KILL_Y := -30.0
 const HIT_COOLDOWN := 0.3
 ## Max height difference the wheels stick to the ground over, m.
 const GROUND_SNAP := 0.5
+## C21: road normal's y below which a too-slow chariot falls off a loop (~70° up the wall and beyond).
+const LOOP_FALL_UP := 0.35
 
 ## Player slot driving this chariot (PlayerInfo.slot). Also the node name `Chariot<slot>`.
 var slot := -1
@@ -76,6 +83,8 @@ var cart_ang_vel := 0.0
 var grounded := true
 ## Surface under the horses at the last step (Surface.*). For HUD / debug.
 var surface: StringName = Surface.NORMAL
+## C21: true while riding a loop's road surface. NET: host / predicting owner (clients see the tilted basis).
+var on_loop := false
 
 var _effects: Dictionary = {} # StringName -> [time_left, strength, source_slot]
 var _whip_cd := 0.0
@@ -94,6 +103,9 @@ var _vis_speed := 0.0 # visuals: last frame's speed / heading, smoothed accel an
 var _vis_yaw := 0.0
 var _vis_acc := 0.0
 var _vis_turn := 0.0
+var _loop_fall := false # C21: fell off a loop, tumbling until it lands (dies)
+var _fall_t := 0.0
+var _cart_pitch := 0.0 # C21: visual, cart tilts along the loop's road
 
 @onready var _cart: Node3D = $Cart
 @onready var _tint: MeshInstance3D = $Horses
@@ -136,6 +148,17 @@ func step(input: ChariotInput, delta: float) -> void:
 		_sync_bodies()
 		return
 	_try_whip(input)
+	if _loop_fall:
+		_step_loop_fall(delta)
+		_sync_bodies()
+		return
+	if not on_loop and grounded and track and track.has_loops() \
+			and track.loop_index_at(track.progress_at(global_position)) >= 0:
+		on_loop = true
+	if on_loop:
+		_step_loop(input, delta)
+		_sync_bodies()
+		return
 	_try_jump(input)
 	var t := tuning
 	surface = _surface_at(global_position)
@@ -209,8 +232,11 @@ func apply_snapshot(s: PackedFloat32Array) -> void:
 	dead = _flags & ChariotSnapshot.FLAG_DEAD != 0
 	if dead != was_dead:
 		_set_solid(not dead)
+	if dead: # C21: a predicting owner forgets its own loop state once the host says it died
+		on_loop = false
+		_loop_fall = false
 	frozen = _flags & ChariotSnapshot.FLAG_FROZEN != 0
-	grounded = absf(velocity.y) < 0.01
+	grounded = absf(velocity.y) < 0.01 or global_basis.y.y < 0.99 # C21: on a loop the velocity climbs
 	_sync_bodies()
 
 
@@ -270,6 +296,8 @@ func kill(cause: StringName, source_slot: int = -1, item_uid: int = -1) -> void:
 		return
 	dead = true
 	velocity = Vector3.ZERO
+	on_loop = false
+	_loop_fall = false
 	_set_solid(false)
 	died.emit(cause, source_slot, item_uid)
 
@@ -288,6 +316,9 @@ func respawn(xform: Transform3D) -> void:
 	_yaw_rate = 0.0
 	grounded = true
 	dead = false
+	on_loop = false
+	_loop_fall = false
+	_cart_pitch = 0.0
 	_set_solid(true)
 	_effects.clear()
 	_hit_cd.clear()
@@ -497,6 +528,91 @@ func _step_cart(cart_surface: StringName, delta: float) -> void:
 			velocity.x *= 1.0 - t.jackknife_speed_loss
 			velocity.z *= 1.0 - t.jackknife_speed_loss
 		cart_ang_vel = -cart_ang_vel * t.bounce
+
+
+## C21: one tick riding a loop. Stateless apart from `on_loop`: progress, lateral offset and speed are read back
+## from the transform and velocity, so prediction corrections on a client just work. NET: host / owner prediction.
+func _step_loop(input: ChariotInput, delta: float) -> void:
+	var t := tuning
+	surface = Surface.NORMAL
+	grounded = true
+	var s := track.progress_at(global_position)
+	var zi := track.loop_index_at(s)
+	var xf := track.road_transform_at(s)
+	var u := (global_position - xf.origin).dot(xf.basis.x)
+	var fwd := -xf.basis.z
+	var v := velocity.dot(fwd)
+	var stunned := has_effect(Effects.STUN)
+	v = _drive(v, input, stunned, delta)
+	v -= t.gravity * t.loop_slope_gravity * fwd.y * delta # climbing slows, the way down speeds up
+	var half := track.track_width * 0.5 - 1.5
+	u = clampf(u + _steer_from(input, stunned) * t.loop_steer_speed * delta, -half, half)
+	s += v * delta
+	_yaw_rate = 0.0
+	cart_ang_vel = 0.0
+	cart_angle = move_toward(cart_angle, 0.0, 2.0 * delta)
+	if zi < 0:
+		_leave_loop(s, u, v)
+		return
+	var z: Vector2 = track.loop_zones()[zi]
+	if s >= z.y:
+		_leave_loop(z.y + 0.05, u, v)
+		return
+	if s <= z.x:
+		_leave_loop(z.x - 0.05, u, v)
+		return
+	xf = track.road_transform_at(s)
+	if xf.basis.y.y < LOOP_FALL_UP and v < t.loop_min_speed:
+		_fall_off_loop(xf, u, v)
+		return
+	global_transform = Transform3D(xf.basis, xf.origin + xf.basis.x * u)
+	velocity = -xf.basis.z * v
+
+
+## Back on flat-road physics at progress `s`, lateral `u`, speed `v` (negative = rolling back out of the entry).
+func _leave_loop(s: float, u: float, v: float) -> void:
+	on_loop = false
+	var xf := track.transform_at(s)
+	global_transform = Transform3D(xf.basis, xf.origin + xf.basis.x * u)
+	velocity = -xf.basis.z * v
+	velocity.y = 0.0
+	grounded = true
+	_cart_pitch = 0.0
+
+
+func _fall_off_loop(xf: Transform3D, u: float, v: float) -> void: # NET: host / owner prediction
+	on_loop = false
+	_loop_fall = true
+	_fall_t = 0.0
+	grounded = false
+	global_transform = Transform3D(xf.basis, xf.origin + xf.basis.x * u)
+	velocity = -xf.basis.z * v
+	print("[Chariot] LOOP FALL %d at %.1f m/s" % [slot, v])
+
+
+## Falling off a loop: ballistic, tumbling, dies on landing (or after loop_fall_time / below FALL_KILL_Y).
+func _step_loop_fall(delta: float) -> void:
+	_fall_t += delta
+	velocity.y -= tuning.gravity * delta
+	global_position += velocity * delta
+	rotate_object_local(Vector3.RIGHT, 1.5 * delta)
+	# WHY: right after letting go the chariot is still under the overhead road; give it a moment to drop clear
+	var landed := _fall_t > 0.35 and global_position.y <= _ground_height(global_position) + 0.2
+	if landed or _fall_t >= tuning.loop_fall_time or global_position.y < FALL_KILL_Y:
+		if multiplayer.is_server():
+			kill(&"loop_fall")
+		else:
+			velocity = Vector3.ZERO # predicting client: wait for the host's death snapshot
+
+
+## Cart pitch (rad about its local X) that puts the axle back on the loop's road. Visual, any peer.
+func _loop_cart_pitch() -> float:
+	var s := track.progress_at(global_position)
+	var xf := track.road_transform_at(s)
+	var u := (global_position - xf.origin).dot(xf.basis.x)
+	var q := track.road_transform_at(s - HITCH_OFFSET - tuning.hitch_length)
+	var local := global_transform.affine_inverse() * (q.origin + q.basis.x * u)
+	return clampf(atan2(-local.y, local.z), -0.9, 0.9)
 
 
 func _move_horses(delta: float) -> void:
@@ -725,6 +841,10 @@ func _process(delta: float) -> void:
 		for e: Array in _team_surfaces:
 			(e[0] as MeshInstance3D).set_surface_override_material(e[1], _team_mat)
 	var speed := get_speed()
+	var tilted := global_basis.y.y < 0.999 # C21: on a loop
+	_cart_pitch = _loop_cart_pitch() if tilted and not dead and not _loop_fall and track and track.has_loops() \
+		else 0.0
+	_cart.rotation.x = _cart_pitch
 	_wheel_spin = fmod(_wheel_spin + speed / WHEEL_RADIUS * delta, TAU)
 	if _wheel_l:
 		_wheel_l.rotation.x = -_wheel_spin
@@ -746,7 +866,8 @@ func _process(delta: float) -> void:
 		var yaw := global_rotation.y
 		var k := clampf(8.0 * delta, 0.0, 1.0)
 		_vis_acc = lerpf(_vis_acc, (speed - _vis_speed) / delta, k)
-		_vis_turn = lerpf(_vis_turn, wrapf(yaw - _vis_yaw, -PI, PI) / delta, k)
+		var turn := 0.0 if tilted else wrapf(yaw - _vis_yaw, -PI, PI) / delta # WHY: euler yaw jumps when upside down
+		_vis_turn = lerpf(_vis_turn, turn, k)
 		_vis_speed = speed
 		_vis_yaw = yaw
 	var pull := clampf(_vis_acc / 8.0, -1.0, 1.0)

@@ -64,6 +64,13 @@ extends Resource
 @export_range(0.0, 60.0) var gravity := 25.0 # TUNE: m/s² (arcade, heavier than 9.8)
 @export_range(0.0, 1.0) var landing_speed_loss := 0.15 # TUNE: on a hard landing
 @export_range(0.0, 20.0) var hard_landing_speed := 6.0 # TUNE: m/s down
+@export_group("Loop")
+## C21: inside a loop the road holds the chariot (surface gravity) while it is faster than this; slower with the
+## road past vertical (overhead) and it falls off.
+@export_range(0.0, 30.0) var loop_min_speed := 10.0 # TUNE: m/s
+@export_range(0.0, 1.0) var loop_slope_gravity := 0.7 # TUNE: share of gravity that slows the climb / speeds the drop (0.7: full speed or a whip makes it; 0.8: only a whip)
+@export_range(0.0, 10.0) var loop_steer_speed := 3.0 # TUNE: m/s sideways at full steer inside a loop
+@export_range(0.5, 5.0) var loop_fall_time := 2.5 # TUNE: s of falling off a loop before it counts as a crash anyway
 @export_group("Collisions")
 @export_range(0.0, 1.0) var bounce := 0.3 # TUNE: restitution vs walls and chariots
 @export_range(0.0, 10.0) var hit_min_speed := 1.0 # TUNE: m/s, slower touches don't emit hit()

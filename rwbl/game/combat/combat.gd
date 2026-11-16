@@ -12,7 +12,8 @@ extends Node
 ##   for &"pit") at `track.respawn_transform(death progress − respawn_back)`, then `chariot_respawned`.
 ##   C24 (user): during a race the dead chariot also waits until another racer's progress has reached its death
 ##   spot (`respawn_wait_for_pass`), at most `respawn_wait_max` s after dying. Every peer can read the wait with
-##   respawn_wait(slot) (HUD).
+##   respawn_wait(slot) (HUD). If a rival's pass released you, you respawn `respawn_rival_gap` m behind that rival
+##   in its lane (`respawn_behind_rival`, user request in the C21 session).
 ## Crow (all peers know who): a slot that finished the race, or died with < `crow_death_time_left` s of race
 ##   left (no respawn then), is a crow until the next race. Every `crow_drop_cooldown` s it may drop one
 ##   `mud_patch` (owner = the crow, so Scoring counts it): local player presses `action` (aimed at the screen
@@ -62,6 +63,7 @@ var _crow_items: Array[int] = [] # uids of crow drops this race (all peers)
 var _seen_wheels: Dictionary = {} # slot -> wheel bits already shown (visuals)
 var _seen_dead: Dictionary = {} # slot -> dead already shown (visuals)
 var _died_at: Dictionary = {} # slot -> _time of death (host)
+var _passer: Dictionary = {} # slot -> the rival whose pass released it (host)
 var _waits: Dictionary = {} # slot -> {progress, max_at (NetClock)} while waiting for a pass (all peers)
 
 
@@ -275,13 +277,20 @@ func _may_respawn(slot: int) -> bool:
 		return true
 	var at := float(_death_progress.get(slot, 0.0))
 	var others := 0
+	var released := false
+	var best := INF
 	for p in _m.players:
 		if p.slot == slot:
 			continue
 		others += 1
-		if _m.race.is_finished(p.slot) or _m.race.progress_of(p.slot) >= at:
-			return true
-	return others == 0
+		if _m.race.is_finished(p.slot):
+			released = true
+		elif _m.race.progress_of(p.slot) >= at:
+			released = true
+			if _m.race.progress_of(p.slot) < best: # the one that just passed = the nearest past the spot
+				best = _m.race.progress_of(p.slot)
+				_passer[slot] = p.slot
+	return released or others == 0
 
 
 func _waits_for_pass() -> bool: # NET: host
@@ -298,7 +307,17 @@ func _respawn(slot: int) -> void: # NET: host
 		return
 	var xf := c.global_transform
 	if track:
-		xf = track.respawn_transform(float(_death_progress.get(slot, 0.0)) - tuning.respawn_back)
+		var p := float(_death_progress.get(slot, 0.0)) - tuning.respawn_back
+		var lat := 0.0
+		var rival: Chariot = _chariots.get(_passer.get(slot, -1))
+		if tuning.respawn_behind_rival and rival and not rival.dead:
+			p = track.progress_at(rival.global_position) - tuning.respawn_rival_gap
+			var half := track.track_width * 0.5 - 2.0
+			lat = clampf(track.lateral_offset(rival.global_position), -half, half)
+			print("[Combat] RESPAWN %d behind %d" % [slot, rival.slot])
+		xf = track.respawn_transform(p)
+		xf.origin += xf.basis.x * lat
+	_passer.erase(slot)
 	c.respawn(xf)
 	if _m:
 		_m.race.notify_teleport(slot)
@@ -332,6 +351,7 @@ func _on_phase_changed(phase: int, _round: int) -> void: # NET: every peer
 		_respawn_at.clear()
 		_pair_cd.clear()
 		_died_at.clear()
+		_passer.clear()
 		_waits.clear()
 	elif not _crow_items.is_empty():
 		for uid in _crow_items:

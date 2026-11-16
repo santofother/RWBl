@@ -24,6 +24,7 @@ extends Resource
 @export_range(0.0, 8.0) var sway_lateral := 2.5 # TUNE: m the camera slides sideways at cart_angle = 1 rad
 @export_range(0.0, 0.6) var sway_roll := 0.15 # TUNE: radians of camera roll at cart_angle = 1 rad
 @export_range(0.0, 12.0) var turn_look := 4.0 # TUNE: m the look point shifts into a turn at full turn rate
+@export_range(0.5, 20.0) var roll_smooth := 6.0 # TUNE: how fast the view rolls with a loop's road (C21)
 @export_group("Shake")
 @export_range(0.0, 1.0) var shake_amount := 0.35 # TUNE: m of positional shake at strength 1
 @export_range(1.0, 30.0) var shake_jump_speed := 5.0 # TUNE: m/s velocity jump in one frame that counts as a hit

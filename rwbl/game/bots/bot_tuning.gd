@@ -17,6 +17,9 @@ extends Resource
 @export_group("Whip")
 @export_range(0.0, 1.0) var whip_stamina := 0.7 # TUNE: whip on straights above this stamina
 @export_range(0.0, 0.01) var whip_max_curve := 0.004 # TUNE: rad/m, no whipping into corners
+@export_group("Loop")
+@export_range(10.0, 150.0) var loop_prep := 70.0 # TUNE: m before a loop (C21) the bot goes flat out and whips
+@export_range(0.0, 1.0) var loop_whip_stamina := 0.15 # TUNE: whips before a loop above this stamina
 @export_group("Traffic")
 @export_range(1.0, 10.0) var lane_gap := 3.0 # TUNE: m of lateral clearance kept from other chariots
 @export_range(5.0, 40.0) var traffic_range := 18.0 # TUNE: m ahead we react to chariots / items

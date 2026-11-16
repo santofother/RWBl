@@ -5,6 +5,9 @@
 #     the course, a chicane at joint 5; then the 3 bots race start -> finish on the grown course and all finish.
 # (2) lobby host + client: the host inserts a hairpin, the client a chicane over RPC and demolishes the hairpin;
 #     both peers print the same course after every change.
+# (3) C21 loop: unit scene game/track/tests/loop_test.tscn (loop shape, fast chariot rides it upside down, slow one
+#     falls off and dies, client interpolation through the roll, build path check); 3 bots race a course with a
+#     loop at joint 2 and all finish.
 set -u
 source "$(dirname "$0")/lib.sh"
 echo "Logs: $OUT"
@@ -12,6 +15,9 @@ PLACES='mud_patch@60,-4,0,0;mud_patch@250,3,0,1;piece_hairpin@0,1,0,0;piece_hair
 PLACES="$PLACES;piece_corner_left@13,1,0,0;piece_hairpin@2,-1,0,0;piece_chicane@5,1,0,1"
 TEST_SCENE=res://game/match/match.tscn launch_peer solo --no-human --bots=3 --phase=build --rounds=1 \
 	--phase-time=110 --no-bot-build "--test-place=$PLACES" --quit-after=130
+TEST_SCENE=res://game/track/tests/loop_test.tscn launch_peer loopunit --quit-after=60
+TEST_SCENE=res://game/match/match.tscn launch_peer loopbots --no-human --bots=3 --phase=build --rounds=1 \
+	--phase-time=90 --no-bot-build '--test-place=piece_loop@2,1,0,0' --quit-after=110
 TEST_SCENE=res://game/lobby/main.tscn launch_peer host --host --name=Host --lobby-autostart=2 --no-fill-bots --free-build \
 	--rounds=1 --phase-time=8 "--discovery-port=$((PORT + 1))" '--test-place=piece_hairpin@2,-1,0' --quit-after=170
 wait_log host '\[Net\] Hosting' 15 || exit 1
@@ -20,6 +26,8 @@ TEST_SCENE=res://game/lobby/main.tscn launch_peer client --join=127.0.0.1 --name
 fail=0
 wait_log client '\[TEST\] PLACE 1 ' 40 || fail=1
 wait_log solo '\[Race\] OVER' 140 || fail=1
+wait_log loopbots '\[Race\] OVER' 30 || fail=1
+wait_log loopunit 'LOOP UNIT (PASSED|FAILED)' 5 || fail=1
 sleep 1
 cleanup_peers; sleep 0.5
 grep -E '^\[(TEST|Build|Track|Race)\]' "$OUT/solo.log" | grep -v '^\[Build\] PATH'
@@ -48,6 +56,11 @@ h=$(grep '^\[TEST\] TRACK ' "$OUT/host.log"); c=$(grep '^\[TEST\] TRACK ' "$OUT/
 if [ -n "$h" ] && [ "$h" = "$c" ] && [ "$(echo "$h" | wc -l)" -eq 3 ]; then echo "  ok   host and client courses identical (3 changes)"
 else echo "  FAIL host/client courses differ"; echo "host:"; echo "$h"; echo "client:"; echo "$c"; fail=1; fi
 echo "$h" | tail -n 1 | grep -Eq 'length=4(79|80)\.[0-9] pieces=2:piece_chicane@4$' && echo "  ok   hairpin gone, gap closed" || { echo "  FAIL final pieces"; fail=1; }
+echo "--- loop"; grep -E '^\[TEST\] (FAIL|LOOP)' "$OUT/loopunit.log"; grep -E '^\[(TEST|Race)\]|LOOP FALL' "$OUT/loopbots.log"
+assert_log loopunit '^\[TEST\] LOOP UNIT PASSED$' && echo "  ok   loop unit checks" || fail=1
+assert_log loopbots '^\[TEST\] PLACE 0 piece_loop -> OK$' && echo "  ok   loop placed" || fail=1
+assert_log loopbots '^\[Race\] OVER order=\[[0-9], [0-9], [0-9]\] finished=3' && echo "  ok   3 bots finished over the loop" || fail=1
+if grep -q 'LOOP FALL' "$OUT/loopbots.log"; then echo "  FAIL a bot fell off the loop"; fail=1; fi
 assert_clean_logs || fail=1
 if [ $fail -eq 0 ]; then echo "TRACK PIECE TEST PASSED"; else echo "TRACK PIECE TEST FAILED (see $OUT)"; fi
 exit $fail

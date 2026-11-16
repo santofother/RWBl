@@ -40,8 +40,13 @@ func _ready() -> void:
 	await get_tree().create_timer(0.6).timeout
 	_check(not c0.dead, "back in once a rival passed the crash spot")
 	_check(m.combat.respawn_wait(0).is_empty(), "wait cleared")
-	_check(absf(t.progress_at(c0.global_position) - (150.0 - m.combat.tuning.respawn_back)) < 3.0,
-		"respawned behind the crash spot (%.0f m)" % t.progress_at(c0.global_position))
+	# FIX(C21, Claude): user request: respawn right behind the rival whose pass released you (was respawn_back
+	# behind the crash spot).
+	var want_p := t.progress_at(c1.global_position) - m.combat.tuning.respawn_rival_gap
+	_check(absf(t.progress_at(c0.global_position) - want_p) < 1.5
+		and absf(t.lateral_offset(c0.global_position) - t.lateral_offset(c1.global_position)) < 1.0,
+		"respawned %.1f m behind the rival that passed, same lane" % (t.progress_at(c1.global_position)
+		- t.progress_at(c0.global_position)))
 	# 2) nobody ever passes: respawn_wait_max caps it
 	c0.respawn(t.transform_at(320.0))
 	m.race.notify_teleport(0)
@@ -70,6 +75,11 @@ func _ready() -> void:
 		"race cut %.1f s after the last human finished" % (cut - NetClock.now()))
 	await get_tree().create_timer(3.0).timeout
 	_check(m.cameras.spectating_other(), "camera spectates the others after finishing")
+	await get_tree().process_frame
+	var card := m.find_child("FinishScreen", true, false) as FinishScreen
+	var ct: Dictionary = card.texts() if card else {}
+	_check(card != null and bool(ct.get("visible", false)) and bool(ct.get("compact", false)),
+		"finish card shrinks to the corner while spectating") # C21 session, user request
 	t0 = Time.get_ticks_msec()
 	while m.phase == Phase.RACE and Time.get_ticks_msec() - t0 < 12000:
 		await get_tree().physics_frame

@@ -20,6 +20,10 @@ extends Node3D
 ##   remove_piece(uid) (every peer), has_piece(uid), piece_at(pos), pieces() -> [{uid id start end flip joint}],
 ##   preview_insert(def_id, joint, flip) -> {code, course, piece} (world points, build ghost), last_change(),
 ##   static insert_text(code), static points_to_curve(points, tangents).
+## Loops (C21): has_loops(), loop_zones() -> [Vector2(start, end) progress], loop_index_at(progress) -> int (-1 =
+##   none), road_transform_at(progress) (full 3D road frame: -Z along the road, +Y = road normal, so upside down at
+##   a loop's top). Inside a loop zone transform_at() returns that same frame; everywhere else it is flat as
+##   before. No items, respawns or crow drops inside a loop (is_in_no_build_zone, respawn_transform).
 ##   Joint k is the boundary before piece k. Inserting is allowed at joints 1 .. n-1 (after the start piece, up to
 ##   just before the finish piece). Everything after the joint moves rigidly; last_change() gives that transform.
 # CONTRACT: API above. Progress increases in the driving direction; the start line is progress 0 and never moves.
@@ -53,6 +57,8 @@ const INSERT_TEXT: Array[String] = ["OK", "Not a track piece", "Pieces go betwee
 	"The course would run into itself", "No such piece"]
 const SELF_ARC := 24.0 # m along the road under which two points are neighbours, not a crossing
 const CAP_HEIGHT := 3.0 # m, the walls closing both open ends of the road
+const CROSS_CLEARANCE := 5.0 # m (C21): two road parts this far apart in height don't cross (the loop's sides)
+const LOOP_MARGIN := 4.0 # m (C21): no items / respawns this close to a loop
 
 var _curve: Curve3D
 var _course: Array[Dictionary] = [] # {uid, id, flip} in driving order; base pieces have uid -1
@@ -67,6 +73,9 @@ var _start_off := 0.0 # curve offset of the start line
 var _finish_off := 0.0 # curve offset of the finish line
 var _curve_len := 0.0
 var _last_change: Dictionary = {}
+var _dense_off := PackedFloat32Array() # C21: curve offset of every composed point
+var _dense_up := PackedVector3Array() # C21: road normal at every composed point (local)
+var _loop_zones: Array[Vector2] = [] # C21: progress spans with loop flags
 
 
 func _ready() -> void:
@@ -110,8 +119,11 @@ func point_at(progress: float) -> Vector3:
 	return to_global(_curve.sample_baked(_off(progress)))
 
 
-## Transform on the centre line at `progress`, -Z facing the driving direction.
+## Transform on the centre line at `progress`, -Z facing the driving direction. Flat (+Y = UP) except inside a
+## loop zone (C21), where it is road_transform_at().
 func transform_at(progress: float) -> Transform3D:
+	if not _loop_zones.is_empty() and loop_index_at(progress) >= 0:
+		return road_transform_at(progress)
 	var lt := _local_off_t(_off(progress))
 	var dir := global_transform.basis * (-lt.basis.z)
 	dir.y = 0.0
@@ -176,15 +188,48 @@ func checkpoint_progress(i: int) -> float:
 	return length() * float(posmod(i, CHECKPOINTS)) / CHECKPOINTS
 
 
-## Safe spot to respawn near `progress` (centre line, facing forward).
+## Safe spot to respawn near `progress` (centre line, facing forward). C21: never inside or right after a loop:
+## moved back to LOOP_MARGIN + 2 m before the loop's entry.
 func respawn_transform(progress: float) -> Transform3D:
+	for z: Vector2 in _loop_zones:
+		if progress > z.x - LOOP_MARGIN - 2.0 and progress < z.y + LOOP_MARGIN:
+			progress = z.x - LOOP_MARGIN - 2.0
 	return transform_at(progress)
 
 
-## True if a circle at `pos` with `radius` touches the start or finish no-build zone.
+## True if a circle at `pos` with `radius` touches the start or finish no-build zone, or a loop (C21).
 func is_in_no_build_zone(pos: Vector3, radius: float = 0.0) -> bool:
 	var p := progress_at(pos)
+	for z: Vector2 in _loop_zones:
+		if p > z.x - LOOP_MARGIN - radius and p < z.y + LOOP_MARGIN + radius:
+			return true
 	return p <= NO_BUILD_AFTER + radius or p >= length() - NO_BUILD_FINISH - radius
+
+
+# ---------------------------------------------------------------- loops (C21)
+
+## True if the course has at least one loop.
+func has_loops() -> bool:
+	return not _loop_zones.is_empty()
+
+
+## Progress spans [start, end] of every loop (where the road leaves the ground), in driving order.
+func loop_zones() -> Array[Vector2]:
+	return _loop_zones
+
+
+## Index into loop_zones() of the loop at `progress`, or -1.
+func loop_index_at(progress: float) -> int:
+	for i in _loop_zones.size():
+		if progress >= _loop_zones[i].x and progress <= _loop_zones[i].y:
+			return i
+	return -1
+
+
+## Full road frame at `progress` (world): -Z along the road (climbs in a loop), +Y = road normal, +X = right.
+## Equals transform_at() on flat road.
+func road_transform_at(progress: float) -> Transform3D:
+	return global_transform * _local_road_t(_off(progress))
 
 
 ## World-space box containing the whole course (build camera, validation grid).
@@ -405,13 +450,24 @@ func _shape(id: StringName, flip: bool) -> Dictionary:
 			var pt: Array = tp.build_points()
 			var pts: PackedVector3Array = (pt[0] as PackedVector3Array).duplicate()
 			var tans: PackedVector3Array = (pt[1] as PackedVector3Array).duplicate()
+			var ups := PackedVector3Array()
+			var loop := PackedByteArray()
+			if pt.size() > 3: # C21: road normals + loop flags
+				ups = (pt[2] as PackedVector3Array).duplicate()
+				loop = (pt[3] as PackedByteArray).duplicate()
+			if ups.size() != pts.size() or loop.size() != pts.size():
+				ups.resize(pts.size())
+				ups.fill(Vector3.UP)
+				loop.resize(pts.size())
+				loop.fill(0)
 			if flip:
 				for k in pts.size():
 					pts[k].x = -pts[k].x
 					tans[k].x = -tans[k].x
+					ups[k].x = -ups[k].x
 			var n := pts.size()
 			var end := Transform3D(Basis.looking_at(tans[n - 1].normalized(), Vector3.UP), pts[n - 1])
-			out = {"pts": pts, "tans": tans, "end": end, "len": tp.road_length(), "line": tp.line_at,
+			out = {"pts": pts, "tans": tans, "ups": ups, "loop": loop, "end": end, "len": tp.road_length(), "line": tp.line_at,
 				"flippable": tp.flippable}
 		inst.free()
 	if out.is_empty():
@@ -420,12 +476,15 @@ func _shape(id: StringName, flip: bool) -> Dictionary:
 	return out
 
 
-## Chain `list` ({id, flip}) into dense local points: {pos, tan, own (index into list), cum (m along), joint_pts
-## (point index of each joint, n + 1), frames (local frame at each joint, n + 1)}. Empty if a piece is unknown.
+## Chain `list` ({id, flip}) into dense local points: {pos, tan, up, loop, own (index into list), cum (m along),
+## joint_pts (point index of each joint, n + 1), frames (local frame at each joint, n + 1)}. Empty if a piece is
+## unknown.
 ## The start piece is placed so its line sits at the local origin heading -Z.
 func _compose(list: Array) -> Dictionary:
 	var pos := PackedVector3Array()
 	var tan := PackedVector3Array()
+	var up := PackedVector3Array()
+	var loop := PackedByteArray()
 	var own := PackedInt32Array()
 	var joint_pts := PackedInt32Array()
 	var frames: Array[Transform3D] = []
@@ -442,9 +501,13 @@ func _compose(list: Array) -> Dictionary:
 		frames.append(frame)
 		var pts: PackedVector3Array = sh["pts"]
 		var tans: PackedVector3Array = sh["tans"]
+		var ups: PackedVector3Array = sh["ups"]
+		var lf: PackedByteArray = sh["loop"]
 		for k in range(0 if i == 0 else 1, pts.size()): # the first point repeats the previous piece's end
 			pos.append(frame * pts[k])
 			tan.append((frame.basis * tans[k]).normalized())
+			up.append((frame.basis * ups[k]).normalized())
+			loop.append(lf[k])
 			own.append(i)
 		frame = frame * (sh["end"] as Transform3D)
 	joint_pts.append(pos.size() - 1)
@@ -453,11 +516,13 @@ func _compose(list: Array) -> Dictionary:
 	cum.resize(pos.size())
 	for k in range(1, pos.size()):
 		cum[k] = cum[k - 1] + pos[k].distance_to(pos[k - 1])
-	return {"pos": pos, "tan": tan, "own": own, "cum": cum, "joint_pts": joint_pts, "frames": frames}
+	return {"pos": pos, "tan": tan, "up": up, "loop": loop, "own": own, "cum": cum, "joint_pts": joint_pts,
+		"frames": frames}
 
 
 ## True if two parts of the course that are more than SELF_ARC m apart along the road come closer than a road
-## width plus both walls (2D, so hills can't cross yet). Hash grid, every 2nd point.
+## width plus both walls. Parts more than CROSS_CLEARANCE m apart in height pass over each other (C21: a loop's
+## sides, later bridges). Hash grid on x/z, every 2nd point.
 func _self_intersects(o: Dictionary) -> bool:
 	if o.is_empty():
 		return true
@@ -485,7 +550,7 @@ func _self_intersects(o: Dictionary) -> bool:
 				if cell == null:
 					continue
 				for j: int in cell:
-					if j <= k or cum[j] - cum[k] <= SELF_ARC:
+					if j <= k or cum[j] - cum[k] <= SELF_ARC or absf(pos[j].y - pos[k].y) > CROSS_CLEARANCE:
 						continue
 					var ddx := pos[j].x - pos[k].x
 					var ddz := pos[j].z - pos[k].z
@@ -513,16 +578,42 @@ func _recompose() -> void:
 		_joint_off.append(_curve.get_closest_offset(pos[k]))
 	_joint_off[0] = 0.0
 	_joint_off[_joint_off.size() - 1] = _curve_len
+	_index_dense(o)
 	var first := _shape(_course[0]["id"], bool(_course[0]["flip"]))
 	_start_off = _curve.get_closest_offset(_frames[0] * Vector3(0.0, 0.0, -maxf(float(first["line"]), 0.0)))
 	var last := _course.size() - 1
 	var fin := _shape(_course[last]["id"], bool(_course[last]["flip"]))
 	var fl := float(fin["line"]) if float(fin["line"]) >= 0.0 else float(fin["len"])
 	_finish_off = _curve.get_closest_offset(_frames[last] * Vector3(0.0, 0.0, -fl))
+	for i in _loop_zones.size():
+		_loop_zones[i] -= Vector2(_start_off, _start_off)
 	var path := get_node_or_null(^"Path") as Path3D
 	if path:
 		path.curve = _curve
 	_compute_bounds()
+
+
+## C21: curve offset + road normal of every composed point, and the loop zones (curve offsets; _recompose shifts
+## them to progress once _start_off is known).
+func _index_dense(o: Dictionary) -> void:
+	var cum: PackedFloat32Array = o["cum"]
+	var n := cum.size()
+	var k_len := _curve_len / maxf(cum[n - 1], 0.001) # WHY: baked length differs from the point chain by << 1 %
+	_dense_off.resize(n)
+	for k in n:
+		_dense_off[k] = cum[k] * k_len
+	_dense_up = o["up"]
+	_loop_zones.clear()
+	var loop: PackedByteArray = o["loop"]
+	var k := 0
+	while k < n:
+		if loop[k] == 0:
+			k += 1
+			continue
+		var a := k
+		while k < n and loop[k] != 0:
+			k += 1
+		_loop_zones.append(Vector2(_dense_off[a], _dense_off[k - 1]))
 
 
 ## After a change: rebuild visuals and tell everyone.
@@ -584,29 +675,31 @@ func _build_visuals() -> void:
 	var slab := SurfaceTool.new()
 	slab.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for i in steps:
-		var t0 := _local_off_t(_curve_len * i / steps)
-		var t1 := _local_off_t(_curve_len * (i + 1) / steps)
+		# C21: the road frame (normal = road up) so a loop's road stands up and turns over
+		var t0 := _local_road_t(_curve_len * i / steps)
+		var t1 := _local_road_t(_curve_len * (i + 1) / steps)
 		_quad(road, t0.origin - t0.basis.x * h, t1.origin - t1.basis.x * h, t0.origin + t0.basis.x * h,
-			t1.origin + t1.basis.x * h, Vector3.UP, 0.02)
+			t1.origin + t1.basis.x * h, t0.basis.y, 0.02)
 		if pit: # slab sides + underside so the road reads as a floating bridge
-			var down := Vector3.DOWN * slab_depth
+			var down := -t0.basis.y * slab_depth
 			for side: float in [-1.0, 1.0]:
 				var e0: Vector3 = t0.origin + t0.basis.x * side * h
 				var e1: Vector3 = t1.origin + t1.basis.x * side * h
 				_strip(slab, e0 + down, e1 + down, -down, t0.basis.x * side)
-			_quad(slab, t0.origin - t0.basis.x * h + down, t1.origin - t1.basis.x * h + down,
-				t0.origin + t0.basis.x * h + down, t1.origin + t1.basis.x * h + down, Vector3.DOWN, 0.0)
+			var down1 := -t1.basis.y * slab_depth
+			_quad(slab, t0.origin - t0.basis.x * h + down, t1.origin - t1.basis.x * h + down1,
+				t0.origin + t0.basis.x * h + down, t1.origin + t1.basis.x * h + down1, -t0.basis.y, 0.0)
 			continue
 		for side: float in [-1.0, 1.0]:
 			var in0: Vector3 = t0.origin + t0.basis.x * side * h
 			var in1: Vector3 = t1.origin + t1.basis.x * side * h
 			var out0: Vector3 = t0.origin + t0.basis.x * side * (h + wall_thickness)
 			var out1: Vector3 = t1.origin + t1.basis.x * side * (h + wall_thickness)
-			var up := Vector3.UP * wall_height
+			var up := t0.basis.y * wall_height
 			var n: Vector3 = -t0.basis.x * side # faces the road
 			_strip(wall, in0, in1, up, n)
 			_strip(wall, out1, out0, up, -n)
-			_quad(wall, in0 + up, in1 + up, out0 + up, out1 + up, Vector3.UP, 0.0)
+			_quad(wall, in0 + up, in1 + up, out0 + up, out1 + up, t0.basis.y, 0.0)
 	var road_mi := MeshInstance3D.new()
 	road_mi.name = "Road"
 	road_mi.mesh = road.commit()
@@ -729,9 +822,39 @@ func _local_off_t(off: float) -> Transform3D:
 	return Transform3D(Basis.looking_at(dir.normalized(), Vector3.UP), p)
 
 
+## C21: full road frame at curve offset `off` (local): -Z along the 3D tangent, +Y = road normal (UP on flat road).
+func _local_road_t(off: float) -> Transform3D:
+	off = clampf(off, 0.0, _curve_len)
+	var p := _curve.sample_baked(off)
+	var a := maxf(off - 0.5, 0.0)
+	var b := minf(off + 0.5, _curve_len)
+	if b - a < 0.5:
+		a = maxf(b - 1.0, 0.0)
+	var fwd := _curve.sample_baked(b) - _curve.sample_baked(a)
+	fwd = fwd.normalized() if fwd.length_squared() > 0.000001 else Vector3.FORWARD
+	var up := _up_at_off(off)
+	var right := fwd.cross(up)
+	if right.length_squared() < 0.0001:
+		right = fwd.cross(Vector3.UP) if absf(fwd.y) < 0.99 else Vector3.RIGHT
+	right = right.normalized()
+	return Transform3D(Basis(right, right.cross(fwd).normalized(), -fwd), p)
+
+
+## Road normal at curve offset `off`, interpolated between composed points (local).
+func _up_at_off(off: float) -> Vector3:
+	var n := _dense_off.size()
+	if n < 2 or _dense_up.size() != n:
+		return Vector3.UP
+	var i := clampi(_dense_off.bsearch(off), 1, n - 1)
+	var a := _dense_off[i - 1]
+	var f := clampf((off - a) / maxf(_dense_off[i] - a, 0.0001), 0.0, 1.0)
+	var u := _dense_up[i - 1].lerp(_dense_up[i], f)
+	return u.normalized() if u.length_squared() > 0.0001 else _dense_up[i]
+
+
 func _quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, n: Vector3, lift: float) -> void:
 	# a,b = near/far left; c,d = near/far right (counter-clockwise seen from +Y when n is UP)
-	var up := Vector3.UP * lift
+	var up := n * lift
 	st.set_normal(n)
 	for v in [a, b, c, c, b, d]:
 		st.add_vertex(v + up)

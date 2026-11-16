@@ -21,6 +21,10 @@ extends Resource
 @export_range(2.0, 30.0) var respawn_wait_max := 8.0 # TUNE: s dead at most, even if nobody passes (never stuck)
 @export_range(0.0, 0.95) var pit_penalty := 0.8 # TUNE: extra s after a pit death (keep delay + this < 3)
 @export_range(0.0, 40.0) var respawn_back := 10.0 # TUNE: m behind the death spot along the track
+## User request (C21 session): when a rival passing your crash spot is what lets you back in, you respawn right
+## behind that rival (same lane) instead of `respawn_back` behind the crash spot.
+@export var respawn_behind_rival := true # TUNE
+@export_range(4.0, 30.0) var respawn_rival_gap := 9.0 # TUNE: m behind the rival's horses (its cart is ~4 m long)
 @export_group("Crow")
 @export_range(1.0, 30.0) var crow_drop_cooldown := 8.0 # TUNE: s between a crow's mud drops
 @export_range(0.0, 60.0) var crow_death_time_left := 10.0 # TUNE: s of race left under which a death makes a crow

@@ -53,7 +53,30 @@ func build_base(track: Track, cell: float, half_width: float) -> void:
 				var idx := k * _nx + i
 				_base[idx] = 1
 				_prog[idx] = p
+	_bridge_loops(track, limit)
 	base_ms = (Time.get_ticks_usec() - t0) / 1000.0
+
+
+# FIX(C21, Claude): a loop's ground footprint isn't a flat lane, so the flood couldn't get from its entry to its
+# exit. Mark a straight corridor (road width) from the loop's entry point to its exit point as drivable. Items
+# can't go on a loop (Track no-build zone), so nothing ever needs to block it.
+func _bridge_loops(track: Track, limit: float) -> void:
+	for z: Vector2 in track.loop_zones():
+		var a := track.point_at(z.x)
+		var b := track.point_at(z.y)
+		var n := maxi(2, ceili(a.distance_to(b) / (_cell * 0.5)))
+		for s in n + 1:
+			var f := float(s) / n
+			var c := a.lerp(b, f)
+			var r := maxf(limit, _cell)
+			for k in range(int(floor((c.z - r - _origin.y) / _cell)), int(floor((c.z + r - _origin.y) / _cell)) + 1):
+				for i in range(int(floor((c.x - r - _origin.x) / _cell)), int(floor((c.x + r - _origin.x) / _cell)) + 1):
+					if i < 0 or k < 0 or i >= _nx or k >= _nz:
+						continue
+					var cc := Vector2(_origin.x + (i + 0.5) * _cell, _origin.y + (k + 0.5) * _cell)
+					if cc.distance_to(Vector2(c.x, c.z)) <= r:
+						_base[k * _nx + i] = 1
+						_prog[k * _nx + i] = lerpf(z.x, z.y, f)
 
 
 ## True if a lap is still drivable with `blockers` = Array of [Transform3D, Vector2 footprint] in place.
