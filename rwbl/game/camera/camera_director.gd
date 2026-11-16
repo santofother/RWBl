@@ -35,6 +35,10 @@ func match_setup(m: MatchMode) -> void:
 		panel.register(tuning, "Camera")
 	GameEvents.phase_changed.connect(_on_phase_changed)
 	build_camera.frame(m.track.get_bounds())
+	# FIX(C22, Claude): the course grows when a piece is inserted; keep the whole course in the build view.
+	GameEvents.track_changed.connect(func() -> void:
+		if _m.phase == Phase.BUILD:
+			build_camera.frame(_m.track.get_bounds()))
 	race_camera.current = true
 
 

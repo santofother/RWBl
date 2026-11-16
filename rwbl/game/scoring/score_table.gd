@@ -18,8 +18,8 @@ extends Resource
 @export_range(0, 500, 5) var kill := 60 # TUNE: per kill (spear, wheel, ram)
 @export_range(-200, 0, 5) var self_kill := -30 # TUNE: died to your own trap
 @export_group("Laps and bonuses")
-@export_range(0, 200, 5) var lap := 25 # TUNE: per lap completed
-@export_range(0, 200, 5) var clean_lap := 25 # TUNE
+@export_range(0, 200, 5) var lap := 25 # TUNE: unused since C23 (no laps); kept so old .tres files load
+@export_range(0, 200, 5) var clean_lap := 25 # TUNE: clean run (no collisions start -> finish), once
 @export_range(0, 200, 5) var mercy := 25 # TUNE: last to finish
 @export_range(0, 500, 5) var fewest_deaths := 50 # TUNE: fewest deaths this round (ties all get it)
 @export_group("Anti-grief")

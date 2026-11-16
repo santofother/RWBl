@@ -53,7 +53,7 @@ func _place(uid: int, owner: int, at: float, id: StringName = &"column") -> void
 
 func _basic() -> void:
 	_begin()
-	# 2 laps each for 0 and 1 (one clean), slot 2 has 1 lap; slot 4 dies once (so 0..3 tie on fewest deaths? no: 4 dies)
+	# C23: laps earn nothing now (lap_completed still emitted to prove it); slot 0 had a clean run; slot 4 dies once
 	for s in [0, 1]:
 		GameEvents.lap_completed.emit(s, 1, true)
 		GameEvents.lap_completed.emit(s, 2, false)
@@ -67,18 +67,18 @@ func _basic() -> void:
 	GameEvents.chariot_died.emit(2, &"item", 2, 99)
 	_finish([1, 0, 2, 3, 4])
 	var bd := _sc.get_breakdown()
-	# slot 1: 1st=150 + laps 50 + fewest deaths(0 deaths: 0 and 1 tie) 50 = 250
-	_eq("finish 1st + laps + fewest deaths", bd[1]["total"], 250)
-	# slot 0: 2nd=100 + 2 laps 50 + clean 25 + fewest 50 + 2 kills 120 = 345
-	_eq("two kills = +120, clean lap, tie gets fewest-deaths", bd[0]["total"], 345)
+	# slot 1: 1st=150 + fewest deaths(0 deaths: 0 and 1 tie) 50 = 200 (no lap points)
+	_eq("finish 1st + fewest deaths, no lap points", bd[1]["total"], 200)
+	# slot 0: 2nd=100 + clean run 25 + fewest 50 + 2 kills 120 = 295
+	_eq("two kills = +120, clean run, tie gets fewest-deaths", bd[0]["total"], 295)
 	_eq("kills column", bd[0]["kills"], 120)
-	# slot 2: 3rd=70 + 1 lap 25 + self-kill -30 (1 death, no fewest) = 65
-	_eq("self-kill -1", bd[2]["total"], 65)
+	# slot 2: 3rd=70 + self-kill -30 (1 death, no fewest) = 40
+	_eq("self-kill -1", bd[2]["total"], 40)
 	# slot 3: 4th=40 + died once = 40; slot 4: 5th=0 + mercy 25 = 25
 	_eq("4th place", bd[3]["total"], 40)
 	_eq("last place mercy", bd[4]["total"], 25)
-	_eq("round_scored fired", _got.get(1), 250)
-	_eq("totals accumulate", _sc.get_totals()[0], 345)
+	_eq("round_scored fired", _got.get(1), 200)
+	_eq("totals accumulate", _sc.get_totals()[0], 295)
 
 
 func _traps() -> void:

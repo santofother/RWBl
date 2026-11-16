@@ -2,17 +2,15 @@ class_name BotManager
 extends Node
 ## Drives every bot slot during the race through ChariotSync.submit_input() (same path as players).
 ## Owner: C06. NET: host only. Bot draft picks are C09's, bot item placement is C08's.
-## Public API: match_setup(m), driver_for(slot), tuning, laps_of(slot).
-## Logs `[Bot] LAP slot n` from its own progress tracking (independent of RaceController).
+## Public API: match_setup(m), driver_for(slot), tuning, laps_of(slot) (1 once the bot reached the finish line).
+## Logs `[Bot] FINISH slot n` from its own progress tracking (independent of RaceController; C23: no laps).
 
 ## Shared driving knobs, registered with the F2 TuningPanel.
 var tuning: BotTuning = preload("res://game/bots/default_tuning.tres")
 
 var _m: MatchMode
 var _drivers: Dictionary = {} # slot -> BotDriver
-var _cum: Dictionary = {} # slot -> unwrapped progress (m), grid starts behind the line (negative)
-var _last: Dictionary = {} # slot -> last wrapped progress
-var _laps: Dictionary = {} # slot -> laps completed
+var _laps: Dictionary = {} # slot -> 1 once it reached the finish line
 
 
 ## Called by MatchMode.setup() on every peer.
@@ -31,7 +29,7 @@ func driver_for(slot: int) -> BotDriver:
 	return _drivers.get(slot)
 
 
-## Laps this manager has seen a bot complete in the current race.
+## 1 once this manager saw the bot reach the finish line this race, else 0.
 func laps_of(slot: int) -> int:
 	return _laps.get(slot, 0)
 
@@ -49,8 +47,6 @@ func _refresh() -> void:
 
 func _on_phase_changed(phase: int, _round: int) -> void:
 	if phase == Phase.RACE:
-		_cum.clear()
-		_last.clear()
 		_laps.clear()
 
 
@@ -65,20 +61,8 @@ func _physics_process(delta: float) -> void:
 
 
 func _track_laps(slot: int, c: Chariot) -> void:
-	var length := _m.track.length()
-	var p := _m.track.progress_at(c.global_position)
-	if p > length * 0.5 and not _last.has(slot):
-		p -= length # grid spots are behind the line
-	if not _last.has(slot):
-		_cum[slot] = p
-	else:
-		var d := fposmod(p - float(_last[slot]) + length * 0.5, length) - length * 0.5
-		if absf(d) < length * 0.25: # WHY: ignore respawn teleports
-			_cum[slot] = float(_cum[slot]) + d
-		else:
-			_cum[slot] = p + floorf(float(_cum[slot]) / length) * length
-	_last[slot] = p
-	var done := int(floorf(float(_cum[slot]) / length))
-	while _laps.get(slot, 0) < done:
-		_laps[slot] = _laps.get(slot, 0) + 1
-		print("[Bot] LAP slot %d %d" % [slot, _laps[slot]])
+	if _laps.has(slot) or c.dead:
+		return
+	if _m.track.progress_at(c.global_position) >= _m.track.finish_progress():
+		_laps[slot] = 1
+		print("[Bot] FINISH slot %d %d" % [slot, _laps.size()])

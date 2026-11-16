@@ -1,20 +1,23 @@
 class_name TrackPiece
 extends Node3D
-## Base of a track piece shape (DESIGN §5.6, C19). Owner: C19. One scene per piece in `game/track/pieces/`,
-## referenced by `ItemDef.piece`; the root script extends this and builds its centre line in code from straights
-## and arcs (`_begin`, `_straight`, `_arc`). Track instantiates the scene once, reads `build_points()` and frees it.
-## Local space: starts at (0,0,0) heading -Z, ends at (0,0,-chord()) heading -Z, so the piece replaces `chord()` m
-## of straight road and the loop stays closed. +X = right of the driving direction; Track mirrors X when flipped.
+## Base of a track piece shape (DESIGN §5.6, C19, C22). Owner: C22. One scene per piece in `game/track/pieces/`,
+## referenced by `ItemDef.piece` (cards) or by id in a course (`start`, `straight`, ...). The root script extends
+## this and builds its centre line in code from straights and arcs (`_begin`, `_straight`, `_arc`). Track
+## instantiates the scene once, reads `build_points()` and frees it, then chains pieces end to start (C22).
+## Local space: starts at (0,0,0) heading -Z; the end may be anywhere with any heading (`end_transform()`).
+## +X = right of the driving direction; Track mirrors X when flipped.
 ## NET: shape data only, identical on every peer.
 ## Public API: `build_points() -> [PackedVector3Array points, PackedVector3Array tangents]`, `build_curve()`,
-##   `chord()`, `flippable`.
-# CONTRACT: points start at Vector3.ZERO heading -Z and end at (0, 0, -chord()) heading -Z.
+##   `chord()`, `end_transform()`, `road_length()`, `flippable`, `line_at`.
+# CONTRACT: points start at Vector3.ZERO heading -Z. The next piece starts at end_transform().
 
 ## Sample spacing of the built centre line (m).
 const STEP := 1.0
 
 ## Whether R (flip left/right) makes sense for this shape.
 @export var flippable := true
+## Start / finish pieces (C22): metres from the piece start where the start or finish line is; -1 = no line.
+@export var line_at := -1.0
 
 var _pts := PackedVector3Array()
 var _tans := PackedVector3Array()
@@ -39,6 +42,24 @@ func chord() -> float:
 	var pt: Array = build_points()
 	var p: PackedVector3Array = pt[0]
 	return p[p.size() - 1].length()
+
+
+## Where the next piece starts (local space): the last point, -Z along the last tangent.
+func end_transform() -> Transform3D:
+	var pt: Array = build_points()
+	var p: PackedVector3Array = pt[0]
+	var t: PackedVector3Array = pt[1]
+	return Transform3D(Basis.looking_at(t[t.size() - 1], Vector3.UP), p[p.size() - 1])
+
+
+## Centre-line length in metres.
+func road_length() -> float:
+	var pt: Array = build_points()
+	var p: PackedVector3Array = pt[0]
+	var len := 0.0
+	for i in range(1, p.size()):
+		len += p[i].distance_to(p[i - 1])
+	return len
 
 
 ## Override: call _straight() / _arc() to draw the shape.

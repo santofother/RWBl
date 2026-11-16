@@ -69,7 +69,9 @@ if [ "$first1" = 0 ]; then
 	assert_log one '^\[Game\] WIN slot 0 ' || fail=1
 	grep -q '^\[Game\] PHASE draft 2' "$OUT/one.log" && { echo "  FAIL went on after slot 0 won"; fail=1; }
 else
-	grep -q '^\[Game\] WIN' "$OUT/one.log" && { echo "  FAIL WIN although slot 0 was not 1st ($first1)"; fail=1; } || echo "  ok   at 1000 but not 1st -> no win"
+	# FIX(C22, Claude): only round 1 counts here; slot 0 may legally win race 2 (it is still at 1000+).
+	awk '/^\[Game\] PHASE draft 2/{exit} {print}' "$OUT/one.log" | grep -q '^\[Game\] WIN' \
+		&& { echo "  FAIL WIN although slot 0 was not 1st ($first1)"; fail=1; } || echo "  ok   at 1000 but not 1st -> no win"
 	assert_log one '^\[Game\] PHASE draft 2' || fail=1
 fi
 # (5) no round cap

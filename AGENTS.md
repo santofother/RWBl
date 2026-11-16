@@ -94,14 +94,16 @@ Godot binary: `$GODOT`, default `/Users/santofothergill/Downloads/Godot.app/Cont
   `--autotest=SEC`, `--quit-after=SEC`, `--lag-ms=N`, `--test-target=x,z`, `--voice` (voice is off by default)
   (cards add more; list them here when you do).
 - Lobby: `--auto-ready`, `--lobby-autostart=N` (host auto-readies, starts once N humans are ready),
-  `--discover`, `--discovery-port=N` (default `DEFAULT_PORT + 1`), `--no-fill-bots`, `--rounds=N`, `--laps=N`,
+  `--discover`, `--discovery-port=N` (default `DEFAULT_PORT + 1`), `--no-fill-bots`, `--rounds=N`,
   `--phase-time=SEC` (test override for all phase durations).
 - Standalone match (run `res://game/match/match.tscn` directly; tests and F6): `--bots=N`, `--no-human`,
-  `--phase=draft|build|race|score`, `--rounds=N`, `--laps=N`, `--phase-time=SEC` (see `docs/ARCHITECTURE.md` §1).
+  `--phase=draft|build|race|score`, `--rounds=N`, `--phase-time=SEC` (`--laps` is ignored since C23: one run
+  from the start line to the finish line) (see `docs/ARCHITECTURE.md` §1).
 - Match flow (C09, any scene with a match, read on the host): `--test-totals=slot:points,...` (added to the score
   totals: tests catch-up dealing and the win score), `--free-build` (Build ignores the draft hands).
 - Build (C08, C17, C19, any scene with a match): `--test-place=item@progress,lateral,deg[,slot];...` (a track
-  piece entry is `piece_hairpin@start,side,0[,slot]`, side < 0 = flipped left; `demolish@uid[,slot]`),
+  piece entry is `piece_hairpin@joint,side,0[,slot]`: joint k = between course pieces k-1 and k, side < 0 =
+  flipped left; `demolish@uid[,slot]`),
   `--no-bot-build` (host: bots place nothing).
 - Netcode (C07, any scene with `ChariotSync`): `--lag-ms=N` (simulated one-way delay on this peer's input /
   snapshot sends), `--loss=PCT` (simulated drop), `--no-predict` (own chariot interpolated like the others),

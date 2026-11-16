@@ -26,6 +26,9 @@ var _t: ChariotTuning
 
 func _ready() -> void:
 	_track = Track.new()
+	# FIX(C22, Claude): the course's start straight (with walls) now runs through the origin; this test wants open
+	# ground there (surfaces come from the BIG patch), so park the road 400 m behind (Jolt's ground plane is finite).
+	_track.position = Vector3(0.0, 0.0, 400.0)
 	add_child(_track)
 	_patch = Node3D.new()
 	add_child(_patch)

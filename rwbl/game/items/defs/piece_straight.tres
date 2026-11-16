@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://game/common/item_def.gd" id="1"]
+[ext_resource type="PackedScene" path="res://game/track/pieces/straight.tscn" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"piece_straight"
+display_name = "Straight"
+description = "A plain stretch of road. Pushes everything after it further away."
+rarity = 0
+category = 5
+footprint = Vector2(14, 30.0)
+placement = 2
+rotatable = false
+cost = 1
+piece = ExtResource("2")
+piece_length = 30.0

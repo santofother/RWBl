@@ -2,7 +2,7 @@ class_name BotDriver
 extends RefCounted
 ## AI driver for one bot slot: looks at its chariot and the track and produces a ChariotInput, exactly like a
 ## player's keyboard would (DESIGN §11 Q6). Owner: C06.
-## Follows the centre line with speed-based look-ahead, brakes for curvature ahead, whips on straights, keeps a
+## Follows the centre line with speed-based look-ahead (C23: stops after the finish line), brakes for curvature ahead, whips on straights, keeps a
 ## lateral offset around other chariots and `blocks_path` items, and reverses out when stuck.
 ## Uses only public APIs of Chariot, Track, Item, so C04/C05 changes don't break it.
 ## NET: host only. Public API: `compute_input(chariot, track, delta) -> ChariotInput`, `tuning`, `seed_slot(slot)`,
@@ -56,6 +56,12 @@ func compute_input(chariot: Chariot, track: Track, delta: float) -> ChariotInput
 		_out.steer = _reverse_steer
 		if _reverse_left <= 0.0:
 			_still = 0.0
+		return _out
+	if p >= track.finish_progress(): # C23: past the finish line, pull up in the run-off
+		var ahead := chariot.global_transform.affine_inverse() * track.point_at(p + 8.0)
+		_out.steer = clampf(atan2(ahead.x, -ahead.z) * tuning.steer_gain, -1.0, 1.0)
+		_out.brake = 1.0 if speed > 0.5 else 0.0
+		_last_progress = p
 		return _out
 	_track_stuck(chariot, p, length, speed, delta)
 

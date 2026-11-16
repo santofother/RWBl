@@ -1,0 +1,7 @@
+[gd_resource type="Resource" script_class="CourseDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/track/course_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+pieces = Array[StringName]([&"start", &"straight", &"straight", &"corner_right", &"straight", &"straight", &"corner_right", &"straight", &"straight", &"corner_left", &"straight", &"corner_left", &"straight", &"finish"])

@@ -287,8 +287,8 @@ func _standalone() -> void:
 	var r := {}
 	if a.has("rounds"):
 		r["rounds"] = int(a["rounds"])
-	if a.has("laps"):
-		r["laps"] = int(a["laps"])
+	if a.has("laps"): # C23: one run to the finish line; the laps rule is gone
+		push_warning("[Game] --laps is ignored: races go from the start line to the finish line (C23)")
 	if a.has("phase"):
 		r["start_phase"] = Phase.from_name(String(a["phase"]))
 	if a.has("phase-time"):

@@ -1,5 +1,5 @@
 extends Node
-## C05 full-race test: match.tscn with 3 pilot bots, 2 laps, race phase only. Logs `[Race] ...` lines and
+## C05 full-race test: match.tscn with 3 pilot bots, start -> finish (C23: no laps), race phase only. Logs `[Race] ...` lines and
 ## `[TEST] RACE FULL DONE` when the match reaches the score phase. NET: offline only.
 
 func _ready() -> void:

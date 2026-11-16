@@ -19,23 +19,24 @@ extends Node
 ##   placement (hand + cost). The answer comes back as place_result(code, card_id).
 ##   Test hook: a `--test-place` entry `demolish@uid[,slot]` demolishes uid; `--test-race-demolish=uid,slot`
 ##   tries it on the host once RACE starts (prints `[TEST] RACE DEMOLISH <uid> -> <CODE>`).
-## Track pieces (C19): a def with `piece` replaces a straight stretch of road (Track.splice_piece). The holder
-##   calls request_piece(id, start_progress, flip); the host checks validate_piece() (phase, item, hand, budget,
-##   then Track.check_splice mapped to PlaceResult: START_ZONE -> NO_BUILD_ZONE, NOT_STRAIGHT -> OFF_TRACK,
-##   OVERLAP -> TOO_CLOSE, SELF_INTERSECT -> BLOCKS_PATH; `last_splice_code` keeps the Track code for the UI) and
-##   splices it on every peer (`[Build] PIECE <uid> <id> slot=N at <start> flip=<b>`). Pieces take uids from the
-##   item counter, so Demolish removes them like items (restores the old road). Items on the replaced section
-##   move to the same progress + lateral offset on the new road (`[Build] PIECE moved <uid>`), or are removed
-##   if that spot is invalid (`[Build] PIECE displaced <uid>`, item_removed). The host decides, peers apply.
-##   Test hook: a `--test-place` entry `piece_hairpin@start,side,0[,slot]` (side < 0 = flipped to the left).
+## Track pieces (C19, C22): a def with `piece` is inserted into the course at a joint (Track.apply_insert). The
+##   holder calls request_piece(id, joint, flip); the host checks validate_piece() (phase, item, hand, budget,
+##   then Track.check_insert mapped to PlaceResult: BAD_JOINT -> NO_BUILD_ZONE, SELF_INTERSECT -> BLOCKS_PATH,
+##   UNKNOWN -> UNKNOWN_ITEM; `last_insert_code` keeps the Track code for the UI) and inserts it on every peer
+##   (`[Build] PIECE <uid> <id> slot=N joint=<k> flip=<b>`). Pieces take uids from the item counter, so Demolish
+##   removes them like items (the gap closes; rejected with BLOCKS_PATH if the course would cross itself). Items
+##   after the joint move rigidly with the course (`[Build] PIECE moved <uid>`); items that end up on the new
+##   piece's road, on a demolished piece, or on a spot that breaks a rule are removed (`[Build] PIECE displaced
+##   <uid>`, item_removed). The host decides, peers apply.
+##   Test hook: a `--test-place` entry `piece_hairpin@joint,side,0[,slot]` (side < 0 = flipped to the left).
 ##   `--no-bot-build`: bots place nothing (tests).
 ## Public API: match_setup(m), request_place(item_id, xform), request_done(), place_for_slot(slot, item_id,
 ##   xform) -> int, validate(slot, item_id, xform) -> int, request_demolish(uid), demolish_for_slot(slot, uid)
 ##   -> int, validate_demolish(slot, uid) -> int, demolish_card(slot), item_at(pos) -> int, static
 ##   is_targeting(def), remaining_hand(slot), budget_left(slot), is_finished(slot), items() -> Dictionary
-##   uid -> Item, `tuning`, `path`, signal place_result. C19: request_piece(id, start, flip),
-##   place_piece_for_slot(slot, id, start, flip) -> int, validate_piece(slot, id, start, flip) -> int,
-##   `last_splice_code`.
+##   uid -> Item, `tuning`, `path`, signal place_result. C22: request_piece(id, joint, flip),
+##   place_piece_for_slot(slot, id, joint, flip) -> int, validate_piece(slot, id, joint, flip) -> int,
+##   `last_insert_code`.
 # CONTRACT: placement RPC is (item_id: StringName, xform: Transform3D); owner = sender's slot on the host.
 # CONTRACT: result codes are PlaceResult.*; spawned items live under MatchMode/Items named "Item<uid>".
 # CONTRACT: demolish RPC is (uid: int); owner = sender's slot on the host. Rejections reuse PlaceResult:
@@ -50,10 +51,10 @@ const CODE_NAMES: Array[String] = ["OK", "WRONG_PHASE", "UNKNOWN_ITEM", "NOT_IN_
 
 ## Build knobs (F2 panel "Build").
 var tuning: BuildTuning = preload("res://game/build/default_tuning.tres")
-## The drivable-lap checker (base grid built on the first BUILD, again after the track changed).
+## The start-to-finish drivable-path checker (base grid built on the first BUILD, again after the track changed).
 var path := PathValidator.new()
-## Track.Splice code of the last validate_piece() that got as far as the track check (BuildUI reason text).
-var last_splice_code := Track.Splice.OK
+## Track.Insert code of the last validate_piece() that got as far as the track check (BuildUI reason text).
+var last_insert_code := Track.Insert.OK
 
 var _m: MatchMode
 var _next_uid := 1
@@ -77,7 +78,7 @@ func match_setup(m: MatchMode) -> void:
 		GameEvents.track_changed.connect(func() -> void:
 			var ps: Array = []
 			for e: Dictionary in _m.track.pieces():
-				ps.append("%d:%s@%.1f" % [int(e["uid"]), e["id"], float(e["start"])])
+				ps.append("%d:%s@%d" % [int(e["uid"]), e["id"], int(e["joint"])])
 			print("[TEST] TRACK length=%.1f pieces=%s" % [_m.track.length(), ",".join(PackedStringArray(ps))]))
 	_ui = BuildUI.new()
 	_ui.name = "BuildUI"
@@ -132,6 +133,8 @@ func validate_demolish(slot: int, uid: int) -> int:
 	# C19: track pieces share the uid counter; the base track and the start line have no uid.
 	if (not _items.has(uid) or not is_instance_valid(_items[uid])) and not _m.track.has_piece(uid):
 		return PlaceResult.UNKNOWN_ITEM
+	if _m.track.has_piece(uid) and _m.track.check_remove(uid) != Track.Insert.OK: # C22: closing the gap crosses
+		return PlaceResult.BLOCKS_PATH
 	var card := demolish_card(slot) if slot >= 0 else &""
 	if card == &"":
 		return PlaceResult.NOT_IN_HAND
@@ -144,12 +147,11 @@ func validate_demolish(slot: int, uid: int) -> int:
 func demolish_for_slot(slot: int, uid: int) -> int: # NET: host
 	var code := validate_demolish(slot, uid)
 	if code == PlaceResult.OK:
-		var piece := _piece_info(uid)
-		var affected := _items_in(float(piece["start"]), float(piece["end"])) if not piece.is_empty() else []
+		var is_piece := _m.track.has_piece(uid)
+		var snap := _snapshot_items() if is_piece else []
 		_rpc_demolish.rpc(uid, slot, demolish_card(slot))
-		if not piece.is_empty(): # the restored road is shorter: squeeze the piece's items onto it
-			var d := ItemDB.get_def(piece["id"])
-			_relocate(affected, float(piece["start"]), d.piece_length / (float(piece["end"]) - float(piece["start"])))
+		if is_piece: # the gap closed: the rest of the course (and its items) moved back
+			_follow_course(snap)
 		_check_all_finished.call_deferred()
 	print("[Build] demolish %d by %d -> %s" % [uid, slot, _code_name(code)])
 	return code
@@ -245,18 +247,18 @@ func validate(slot: int, item_id: StringName, xform: Transform3D) -> int:
 	return PlaceResult.OK
 
 
-## Local player: ask the host to splice track piece `item_id` in at `start_progress` (mirrored if `flip`).
+## Local player: ask the host to insert track piece `item_id` at course joint `joint` (mirrored if `flip`).
 ## The answer arrives as place_result.
-func request_piece(item_id: StringName, start_progress: float, flip: bool) -> void:
+func request_piece(item_id: StringName, joint: int, flip: bool) -> void:
 	if multiplayer.is_server():
-		place_result.emit(place_piece_for_slot(_m.local_slot(), item_id, start_progress, flip), item_id)
+		place_result.emit(place_piece_for_slot(_m.local_slot(), item_id, joint, flip), item_id)
 	else:
-		_rpc_request_piece.rpc_id(1, item_id, start_progress, flip)
+		_rpc_request_piece.rpc_id(1, item_id, joint, flip)
 
 
 ## Check a track piece without placing it (host: authoritative; client: ghost preview). Order: phase, item,
-## hand, budget, then the track's own check (start zone, overlap, straight road, self-intersection).
-func validate_piece(slot: int, item_id: StringName, start_progress: float, flip: bool) -> int:
+## hand, budget, then the track's own check (joint inside start/finish, self-intersection).
+func validate_piece(slot: int, item_id: StringName, joint: int, flip: bool) -> int:
 	if _m == null or _m.phase != Phase.BUILD:
 		return PlaceResult.WRONG_PHASE
 	var d := ItemDB.get_def(item_id)
@@ -266,32 +268,27 @@ func validate_piece(slot: int, item_id: StringName, start_progress: float, flip:
 		return PlaceResult.NOT_IN_HAND
 	if d.cost > budget_left(slot):
 		return PlaceResult.OVER_BUDGET
-	last_splice_code = _m.track.check_splice(item_id, start_progress, flip)
-	match last_splice_code:
-		Track.Splice.OK:
+	last_insert_code = _m.track.check_insert(item_id, joint, flip)
+	match last_insert_code:
+		Track.Insert.OK:
 			return PlaceResult.OK
-		Track.Splice.START_ZONE:
+		Track.Insert.BAD_JOINT:
 			return PlaceResult.NO_BUILD_ZONE
-		Track.Splice.NOT_STRAIGHT:
-			return PlaceResult.OFF_TRACK
-		Track.Splice.OVERLAP:
-			return PlaceResult.TOO_CLOSE
-		Track.Splice.SELF_INTERSECT:
+		Track.Insert.SELF_INTERSECT:
 			return PlaceResult.BLOCKS_PATH
 	return PlaceResult.UNKNOWN_ITEM
 
 
-## Host: validate and, if OK, splice the piece on every peer and move/remove the items on the replaced section.
+## Host: validate and, if OK, insert the piece on every peer and move/remove the items after the joint.
 ## Returns a PlaceResult code.
-func place_piece_for_slot(slot: int, item_id: StringName, start_progress: float, flip: bool) -> int: # NET: host
-	var code := validate_piece(slot, item_id, start_progress, flip)
+func place_piece_for_slot(slot: int, item_id: StringName, joint: int, flip: bool) -> int: # NET: host
+	var code := validate_piece(slot, item_id, joint, flip)
 	if code == PlaceResult.OK:
 		var uid := _next_uid
 		_next_uid += 1
-		var cut := ItemDB.get_def(item_id).piece_length
-		var affected := _items_in(start_progress, start_progress + cut)
-		_rpc_place_piece.rpc(uid, item_id, _m.track.to_base_progress(start_progress), flip, slot)
-		_relocate(affected, start_progress, 1.0)
+		var snap := _snapshot_items()
+		_rpc_place_piece.rpc(uid, item_id, joint, flip, slot)
+		_follow_course(snap)
 		_check_all_finished.call_deferred()
 	print("[Build] place %s by %d -> %s" % [item_id, slot, _code_name(code)])
 	return code
@@ -422,14 +419,13 @@ func _bot_target(slot: int) -> int: # NET: host
 	return best
 
 
-func _bot_piece_spot(slot: int, id: StringName) -> Variant: # NET: host. [start_progress, flip] or null
-	var d := ItemDB.get_def(id)
-	var track := _m.track
-	for i in tuning.bot_tries:
-		var s := randf_range(Track.PIECE_KEEP_AFTER, track.length() - Track.PIECE_KEEP_BEFORE - d.piece_length)
+func _bot_piece_spot(slot: int, id: StringName) -> Variant: # NET: host. [joint, flip] or null
+	var n := _m.track.course().size()
+	for i in mini(tuning.bot_tries, 2 * n):
+		var joint := randi_range(1, n - 1)
 		var flip := randf() < 0.5
-		if validate_piece(slot, id, s, flip) == PlaceResult.OK:
-			return [s, flip]
+		if validate_piece(slot, id, joint, flip) == PlaceResult.OK:
+			return [joint, flip]
 	return null
 
 
@@ -473,7 +469,7 @@ func _run_test_places() -> void:
 			print("[TEST] PLACE %d %s -> %s" % [i, id, _code_name(code)])
 			continue
 		if ItemDB.get_def(id) and ItemDB.get_def(id).is_piece() and nums.size() >= 1:
-			code = await _test_piece(id, float(nums[0]), nums.size() > 1 and float(nums[1]) < 0.0,
+			code = await _test_piece(id, int(nums[0]), nums.size() > 1 and float(nums[1]) < 0.0,
 				int(nums[3]) if nums.size() > 3 else 0, answers, i)
 			print("[TEST] PLACE %d %s -> %s" % [i, id, _code_name(code)])
 			continue
@@ -515,11 +511,11 @@ func _test_demolish(uid: int, slot: int, answers: Array[int], i: int) -> int:
 	return code
 
 
-## Test hook: splice piece `id` as `slot` (no-human host), the local player (host) or over RPC (client).
-func _test_piece(id: StringName, start: float, flip: bool, slot: int, answers: Array[int], i: int) -> int:
+## Test hook: insert piece `id` at `joint` as `slot` (no-human host), the local player (host) or over RPC (client).
+func _test_piece(id: StringName, joint: int, flip: bool, slot: int, answers: Array[int], i: int) -> int:
 	if multiplayer.is_server() and _m.local_slot() < 0:
-		return place_piece_for_slot(slot, id, start, flip)
-	request_piece(id, start, flip)
+		return place_piece_for_slot(slot, id, joint, flip)
+	request_piece(id, joint, flip)
 	if multiplayer.is_server():
 		return answers[i] if answers.size() > i else -1
 	var deadline := Time.get_ticks_msec() + 5000
@@ -556,62 +552,64 @@ func _check_all_finished() -> void: # NET: host
 	GameEvents.phase_end_requested.emit(Phase.BUILD)
 
 
-# ---------------------------------------------------------------- track pieces: items on a changed section
+# ---------------------------------------------------------------- track pieces: items follow the course
 
-## Current {uid, id, start, end} of piece `uid`, or {} if it is not a piece.
-func _piece_info(uid: int) -> Dictionary:
-	for e: Dictionary in _m.track.pieces():
-		if int(e["uid"]) == uid:
-			return e
-	return {}
-
-
-## Host, before the track changes: items whose nearest centre-line point is in [a, b], in driving order, as
-## [uid, progress, lateral offset, yaw relative to the road].
-func _items_in(a: float, b: float) -> Array: # NET: host
+## Host, before the course changes: [uid, progress, lateral offset] of every live item.
+func _snapshot_items() -> Array: # NET: host
 	var out: Array = []
 	var track := _m.track
 	for uid: int in _items:
 		var it: Item = _items[uid]
 		if not is_instance_valid(it) or it.is_queued_for_deletion():
 			continue
-		var p := track.progress_at(it.global_position)
-		if p < a or p > b:
-			continue
-		var t := track.transform_at(p)
-		var lat := (it.global_position - t.origin).dot(t.basis.x)
-		var yaw := (-t.basis.z).signed_angle_to(-it.global_basis.z, Vector3.UP)
-		out.append([uid, p, lat, yaw])
+		out.append([uid, track.progress_at(it.global_position), track.lateral_offset(it.global_position)])
 	out.sort_custom(func(x: Array, y: Array) -> bool: return float(x[1]) < float(y[1]))
 	return out
 
 
-## Host, after the track changed: put each affected item at progress `from + (p - from) * scale` with its old
-## lateral offset and yaw on the new road; if that spot breaks a placement rule, remove it. Broadcasts the result.
-func _relocate(affected: Array, from: float, scale: float) -> void: # NET: host
-	if affected.is_empty():
+## Host, right after an insert/remove (Track.last_change()): items after the change move with the course; items on
+## a removed piece, items now on the inserted piece's road, and moved items whose new spot breaks a placement rule
+## are removed. Broadcasts the result.
+func _follow_course(snap: Array) -> void: # NET: host
+	var ch := _m.track.last_change()
+	if snap.is_empty() or ch.is_empty():
 		return
 	var track := _m.track
+	var from := float(ch["from"])
+	var to := float(ch["to"])
+	var delta: Transform3D = ch["delta"]
+	var removing: bool = ch["kind"] == &"remove"
 	var moves: Array = [] # [uid, Transform3D]
 	var removed: Array = [] # uids
-	var pending := {} # affected uids not decided yet (ignored by the gap check)
-	for a: Array in affected:
-		pending[int(a[0])] = true
-	var moved := {} # uid -> new Transform3D
-	for a: Array in affected:
+	var pending := {} # moved uids not decided yet (ignored by the gap check)
+	var todo: Array = [] # [uid, new xf, old lateral]
+	for a: Array in snap:
 		var uid := int(a[0])
-		pending.erase(uid)
 		var it: Item = _items.get(uid)
 		if it == null or not is_instance_valid(it):
 			continue
-		var t := track.transform_at(from + (float(a[1]) - from) * scale)
-		var xf := Transform3D(t.basis.rotated(Vector3.UP, float(a[3])), t.origin + t.basis.x * float(a[2]))
-		if _relocation_ok(uid, it.def, xf, float(a[2]), pending, moved, removed):
+		var p := float(a[1])
+		if removing and p >= from and p <= to:
+			removed.append(uid) # it was on the demolished piece
+		elif p >= to:
+			pending[uid] = true
+			todo.append([uid, delta * it.global_transform, float(a[2])])
+		elif not removing:
+			var np := track.progress_at(it.global_position)
+			if np > float(ch["piece_from"]) + 0.5 and np < float(ch["piece_to"]) - 0.5:
+				removed.append(uid) # the new piece's road runs over it
+	var moved := {} # uid -> new Transform3D
+	for a: Array in todo:
+		var uid := int(a[0])
+		pending.erase(uid)
+		var xf: Transform3D = a[1]
+		if _relocation_ok(uid, _items[uid].def, xf, float(a[2]), pending, moved, removed):
 			moved[uid] = xf
 			moves.append([uid, xf])
 		else:
 			removed.append(uid)
-	_rpc_piece_items.rpc(moves, removed)
+	if not moves.is_empty() or not removed.is_empty():
+		_rpc_piece_items.rpc(moves, removed)
 
 
 func _relocation_ok(uid: int, d: ItemDef, xf: Transform3D, lat: float, pending: Dictionary, moved: Dictionary,
@@ -696,16 +694,16 @@ func _rpc_request_place(item_id: StringName, xform: Transform3D) -> void: # NET:
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func _rpc_request_piece(item_id: StringName, start_progress: float, flip: bool) -> void: # NET: host
+func _rpc_request_piece(item_id: StringName, joint: int, flip: bool) -> void: # NET: host
 	if not multiplayer.is_server():
 		return
 	var sender := multiplayer.get_remote_sender_id()
-	var code := place_piece_for_slot(_m.slot_of_peer(sender), item_id, start_progress, flip)
+	var code := place_piece_for_slot(_m.slot_of_peer(sender), item_id, joint, flip)
 	_rpc_place_result.rpc_id(sender, code, item_id)
 
 
 @rpc("authority", "call_local", "reliable")
-func _rpc_place_piece(uid: int, item_id: StringName, base_start: float, flip: bool, slot: int) -> void: # NET: every peer
+func _rpc_place_piece(uid: int, item_id: StringName, joint: int, flip: bool, slot: int) -> void: # NET: every peer
 	var d := ItemDB.get_def(item_id)
 	if d == null or not d.is_piece():
 		return
@@ -713,9 +711,8 @@ func _rpc_place_piece(uid: int, item_id: StringName, base_start: float, flip: bo
 		_placed[slot] = [] as Array[StringName]
 	(_placed[slot] as Array).append(item_id)
 	_spent[slot] = int(_spent.get(slot, 0)) + d.cost
-	_m.track.apply_splice(uid, item_id, base_start, flip)
-	var e := _piece_info(uid)
-	print("[Build] PIECE %d %s slot=%d at %.1f flip=%s" % [uid, item_id, slot, float(e.get("start", -1.0)), flip])
+	_m.track.apply_insert(uid, item_id, joint, flip)
+	print("[Build] PIECE %d %s slot=%d joint=%d flip=%s" % [uid, item_id, slot, joint, flip])
 
 
 @rpc("authority", "call_local", "reliable")
@@ -758,7 +755,7 @@ func _rpc_demolish(uid: int, slot: int, card: StringName) -> void: # NET: every 
 		_placed[slot] = [] as Array[StringName]
 	(_placed[slot] as Array).append(card)
 	_spent[slot] = int(_spent.get(slot, 0)) + (d.cost if d else 0)
-	if _m.track.has_piece(uid): # C19: a track piece; restore the old road (no item_removed: it was no item)
+	if _m.track.has_piece(uid): # C19/C22: a track piece; the gap closes (no item_removed: it was no item)
 		_m.track.remove_piece(uid)
 		print("[Build] DEMOLISH %d by %d" % [uid, slot])
 		return

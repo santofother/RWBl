@@ -10,7 +10,7 @@
 set -u
 source "$(dirname "$0")/lib.sh"
 echo "Logs: $OUT"
-PLACES='oil_slick@60,0,0,0;oil_slick@0,0,0,1;mud_patch@60,1,0,2;column@100,-4,0,0;column@100,0,0,1;column@100,4,0,2'
+PLACES='oil_slick@60,0,0,0;oil_slick@0,0,0,1;mud_patch@60,1,0,2;column@40,-4,0,0;column@40,0,0,1;column@40,4,0,2'
 PLACES="$PLACES;demolish@1,1;demolish@1,2;demolish@999,2;demolish@2,1;mud_patch@60,1,0,2"
 TEST_SCENE=res://game/match/match.tscn launch_peer solo --no-human --bots=3 --phase=build --rounds=1 \
 	--phase-time=30 "--test-place=$PLACES" --test-race-demolish=3,0 --quit-after=12
@@ -19,7 +19,7 @@ TEST_SCENE=res://game/lobby/main.tscn launch_peer host --host --name=Host --lobb
 	--rounds=1 --phase-time=6 "--discovery-port=$((PORT + 1))" '--test-place=oil_slick@60,0,0' --quit-after=25
 wait_log host '\[Net\] Hosting' 15 || exit 1
 TEST_SCENE=res://game/lobby/main.tscn launch_peer client --join=127.0.0.1 --name=C1 --auto-ready \
-	"--discovery-port=$((PORT + 1))" '--test-place=column@100,0,0;ramp@0,0,0;demolish@1;demolish@2' --quit-after=25
+	"--discovery-port=$((PORT + 1))" '--test-place=column@40,0,0;ramp@0,0,0;demolish@1;demolish@2' --quit-after=25
 fail=0
 wait_log solo '\[Game\] PHASE race' 30 || fail=1
 wait_log client '\[TEST\] PLACE 3 ' 30 || fail=1
@@ -57,8 +57,8 @@ for c in "0 column OK" "1 ramp NO_BUILD_ZONE" "2 demolish OK" "3 demolish NOT_IN
 	assert_log client "^\[TEST\] PLACE $1 $2 -> $3\$" && echo "  ok   client $2 -> $3 (over RPC)" || fail=1
 done
 for p in host client; do
-	assert_log "$p" '^\[Build\] SPAWN 1 oil_slick slot=0 at 60\.0 0\.0' || fail=1
-	assert_log "$p" '^\[Build\] SPAWN 2 column slot=1 at 100\.0 0\.0' || fail=1
+	assert_log "$p" '^\[Build\] SPAWN 1 oil_slick slot=0 at -?0\.0 -60\.0' || fail=1
+	assert_log "$p" '^\[Build\] SPAWN 2 column slot=1 at -?0\.0 -40\.0' || fail=1
 	assert_log "$p" '^\[Build\] DEMOLISH 1 by 1$' || fail=1
 	n=$(grep -c '^\[TEST\] ITEM_REMOVED 1$' "$OUT/$p.log"); [ "$n" = 1 ] && echo "  ok   $p item_removed 1 once" || { echo "  FAIL $p item_removed 1 x$n"; fail=1; }
 	if grep -q '^\[Build\] DEMOLISH 2 ' "$OUT/$p.log"; then echo "  FAIL $p rejected demolish removed uid 2"; fail=1; fi

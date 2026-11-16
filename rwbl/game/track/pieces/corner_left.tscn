@@ -1,0 +1,8 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://game/track/pieces/corner.gd" id="1"]
+
+[node name="CornerLeft" type="Node3D"]
+script = ExtResource("1")
+flippable = false
+right = false

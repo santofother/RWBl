@@ -79,16 +79,21 @@ so wave-1 cards can work in parallel. The owner replaces the stub body and keeps
   `Item.find_item(collider).chariot_hit(self, part, speed)`.
 - **Surfaces / effects** `surface.gd` (`normal oil mud ice gravel offtrack`), `effects.gd` (`boost slow stun
   no_steer reverse_steer drunk shake tangled barbed`). Items pick these; only C04's controller interprets them.
-- **Track** `track/track.gd`: positions are world space, `progress` = metres along the centre line from the
-  start line. `progress_at, point_at, transform_at, lateral_offset, is_on_track, surface_at,
-  register_surface_patch(node, surface, half_extents), start_transform(i), checkpoint_progress(i),
-  respawn_transform(progress), is_in_no_build_zone(pos, r), get_bounds, get_center_curve`.
-  C19 track pieces: `splice_piece(def_id, start_progress, flip, uid) -> bool` (host validates with
-  `check_splice -> Track.Splice.*`; peers `apply_splice(uid, def_id, base_start, flip)` in the same order),
-  `remove_piece(uid)`, `has_piece`, `piece_at(pos)`, `pieces() -> [{uid id start end flip base_start}]`,
-  `to_base_progress`, `piece_world_points`. Pieces only replace straight stretches of the original road, never
-  within 40 m of the line; after each change road/walls/bounds/checkpoints are rebuilt and
-  `GameEvents.track_changed()` fires on that peer. Anything caching the curve or item progress re-reads it then.
+- **Track** `track/track.gd` (C22): an open **course** of TrackPiece scenes chained end to start, raced once from
+  the start line (progress 0, at the Track origin heading -Z) to a separate finish line. Positions are world space,
+  `progress` = metres along the centre line from the start line (negative on the grid, `length()` =
+  `finish_progress()` = the finish line, more in the run-off; sampling clamps at both open ends). `progress_at,
+  point_at, transform_at, lateral_offset, is_on_track, surface_at, register_surface_patch(node, surface,
+  half_extents), start_transform(i), checkpoint_progress(i)` (evenly spread start..finish, respawn only),
+  `respawn_transform(progress), is_in_no_build_zone(pos, r)` (start and finish), `get_bounds, get_center_curve,
+  finish_transform`. Course: `course() -> [piece ids]`, `joints() -> [progress]` (n + 1), `check_insert(def_id,
+  joint, flip) -> Track.Insert.*` (OK UNKNOWN BAD_JOINT SELF_INTERSECT NOT_FOUND), `apply_insert(uid, def_id,
+  joint, flip)` (every peer, host order), `check_remove(uid)`, `remove_piece(uid)`, `has_piece`, `piece_at`,
+  `pieces() -> [{uid id start end flip joint}]`, `preview_insert`, `last_change() -> {kind from to delta
+  piece_from piece_to}` (the rigid transform everything after the change moved by). Inserts go at joints
+  1..n-1 only; the start/finish pieces are never removed. Base course: `track/default_course.tres`
+  (`CourseDef.pieces`). After each change road/walls/caps/bounds are rebuilt and `GameEvents.track_changed()`
+  fires on that peer; anything caching the curve or item progress re-reads it then.
 - **Match** `game_mode.gd`, `phase.gd` (`NONE DRAFT BUILD RACE SCORE MATCH_OVER`), `match/match.gd`: rules keys
   `rounds laps win_score draft_time build_time race_time score_time start_phase`. Host drives; any system ends
   a phase early with `GameEvents.phase_end_requested(phase)`.
@@ -98,8 +103,9 @@ so wave-1 cards can work in parallel. The owner replaces the stub body and keeps
   item_removed, lap_completed, clean_lap, chariot_finished, race_over, trap_hit, chariot_died, kill,
   self_kill, chariot_respawned, round_scored`. Each line in the file says who emits it and on which peers.
 - **Items** `item_def.gd` (`id rarity category tags footprint placement blocks_path rotatable cost scene icon
-  piece piece_length`; C19: `piece != null` = track piece card, `category` PIECE, `scene` null, placed with
-  `BuildPhase.request_piece(id, start_progress, flip)`, shares the item uid counter so Demolish removes it),
+  piece piece_length`; C19/C22: `piece != null` = track piece card, `category` PIECE, `scene` null,
+  `piece_length` = its road length, inserted with `BuildPhase.request_piece(id, joint, flip)`, shares the item
+  uid counter so Demolish removes it and the gap closes),
   `tag_rule.gd`/`tag_table.gd` (`lookup(tags_a, tags_b) -> rules`, order-insensitive), `items/item.gd` hooks
   `placed, race_started, race_ended, triggered, chariot_entered (Area3D "Trigger"), chariot_hit, interact`,
   helpers `report_hit(victim)` (→ `trap_hit`), `trigger()` (RPC to all). `items/item_db.gd` finds every

@@ -15,4 +15,4 @@ placement = 2
 rotatable = false
 cost = 1
 piece = ExtResource("2")
-piece_length = 42.0
+piece_length = 126.0

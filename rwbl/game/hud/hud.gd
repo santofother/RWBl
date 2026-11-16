@@ -220,13 +220,16 @@ func hide_all() -> void:
 	_draft_box.visible = false
 
 
-## Race HUD. Keys: lap, laps, place, stamina (0..1), wheels (ChariotSnapshot bits), ammo, color, countdown
+## Race HUD. Keys: to_go (m to the finish; C23, shown instead of lap/laps when present), lap, laps, place, stamina (0..1), wheels (ChariotSnapshot bits), ammo, color, countdown
 ## (seconds left, <= 0 hides), go (bool, show "GO!"), whip_cost (flash below it, default 0.01).
 func show_race(d: Dictionary) -> void:
 	_draft_box.visible = false
 	_race_box.visible = true
 	var col: Color = d.get("color", Color.WHITE)
-	_lap_label.text = "LAP %d/%d" % [int(d.get("lap", 1)), int(d.get("laps", 1))]
+	if d.has("to_go"): # C23: one run to the finish line, no laps
+		_lap_label.text = "%d m TO GO" % int(ceilf(float(d["to_go"]))) if float(d["to_go"]) > 0.0 else "FINISHED"
+	else:
+		_lap_label.text = "LAP %d/%d" % [int(d.get("lap", 1)), int(d.get("laps", 1))]
 	_place_label.text = ordinal(int(d.get("place", 1)))
 	_place_label.add_theme_color_override(&"font_color", col.lightened(0.25))
 	var st := float(d.get("stamina", 1.0))
@@ -458,6 +461,7 @@ func _update_race(slot: int, delta: float) -> void:
 	var info := _m.get_player(slot)
 	d["color"] = info.color if info else Color.WHITE
 	d["lap"] = race.lap_of(slot)
+	d["to_go"] = race.to_go(slot) # C23: replaces the lap counter
 	d["place"] = race.place_of(slot)
 	d["ammo"] = 0 # TODO(C15): spear ammo once the ballista/spear items exist (wave 4)
 	var ch := _m.chariot_sync.get_chariot(slot) as Chariot

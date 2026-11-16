@@ -5,9 +5,11 @@ extends CanvasLayer
 ## C14 restyles it later (hand + toasts). Created by BuildPhase in match_setup().
 ## Targeting cards (Demolish, C17): no ghost; a red box highlights the placed item under the mouse, LMB asks
 ## the host to remove it (BuildPhase.request_demolish). Nothing under the mouse = nothing happens.
-## Track pieces (C19): the ghost is a translucent road outline that snaps along the centre line (centred on the
-## mouse), R (or Q/E) flips it left/right, LMB asks the host to splice it (BuildPhase.request_piece). Demolish
-## also highlights a placed piece's road.
+## Track pieces (C22): holding a piece shows a marker on every joint where it can go (between two pieces, or at
+## the end just before the finish). The joint nearest the mouse lights up and the ghost shows the new piece
+## (bright) plus the whole course as it would be after the insert (faint), green/red with the reason. R (or Q/E)
+## flips it left/right, LMB asks the host to insert it there (BuildPhase.request_piece). Demolish also
+## highlights a placed piece's road.
 ## NET: local only. The host's answer (place_result) is what counts; the colour is only a preview.
 ## Public API: setup(m, build), `selected` (item id or &"").
 
@@ -31,7 +33,13 @@ var _last_code := -1
 var _hand_key := ""
 var _target_uid := -1 # Demolish: item under the mouse, or -1
 var _flip := false # track piece mirrored to the left
-var _piece_start := 0.0 # track piece: start progress under the mouse
+var _piece_joint := -1 # track piece: course joint nearest the mouse
+var _course_ghost: MeshInstance3D # track piece: the whole course after the insert
+var _course_mat: StandardMaterial3D
+var _markers: Node3D # track piece: one disc per joint
+var _marker_key := ""
+var _marker_mat: StandardMaterial3D
+var _marker_hot: StandardMaterial3D
 
 
 ## Wire to the match. Called once by BuildPhase.
@@ -49,6 +57,22 @@ func setup(m: MatchMode, build: BuildPhase) -> void:
 	_ghost.visible = false
 	_ghost.top_level = true
 	build.add_child.call_deferred(_ghost)
+	_course_ghost = MeshInstance3D.new()
+	_course_ghost.name = "CourseGhost"
+	_course_mat = _ghost_mat.duplicate()
+	_course_ghost.material_override = _course_mat
+	_course_ghost.visible = false
+	_course_ghost.top_level = true
+	build.add_child.call_deferred(_course_ghost)
+	_markers = Node3D.new()
+	_markers.name = "JointMarkers"
+	_markers.top_level = true
+	_markers.visible = false
+	build.add_child.call_deferred(_markers)
+	_marker_mat = _ghost_mat.duplicate()
+	_marker_mat.albedo_color = Color(1.0, 0.85, 0.2, 0.8)
+	_marker_hot = _ghost_mat.duplicate()
+	_marker_hot.albedo_color = Color(1.0, 1.0, 1.0, 0.95)
 	build.place_result.connect(_on_place_result)
 	GameEvents.phase_changed.connect(_on_phase_changed)
 	_set_active(false)
@@ -106,6 +130,10 @@ func _select(id: StringName) -> void:
 	_reason.text = ""
 	_target_uid = -1
 	_flip = false
+	_piece_joint = -1
+	if _course_ghost:
+		_course_ghost.visible = false
+		_markers.visible = false
 	if _ghost:
 		_ghost.visible = false
 		var d := ItemDB.get_def(id)
@@ -191,28 +219,73 @@ func _process(delta: float) -> void:
 
 func _update_piece(pos: Vector3) -> void:
 	var track := _m.track
-	var d := ItemDB.get_def(selected)
-	_piece_start = snappedf(track.progress_at(pos) - d.piece_length * 0.5, _build.tuning.snap)
-	var key := "%s %.2f %s" % [selected, _piece_start, _flip]
+	var joints := track.joints()
+	_update_markers(joints)
+	# the insertable joint (1 .. n-1) nearest the mouse
+	var best := -1
+	var best_d := INF
+	for k in range(1, joints.size() - 1):
+		var jp := track.point_at(joints[k])
+		var dd := Vector2(jp.x - pos.x, jp.z - pos.z).length_squared()
+		if dd < best_d:
+			best_d = dd
+			best = k
+	_piece_joint = best
+	var key := "%s %d %s %.2f" % [selected, _piece_joint, _flip, track.length()]
 	if key == _last_key:
 		return
 	_last_key = key
-	_last_code = _build.validate_piece(_m.local_slot(), selected, _piece_start, _flip)
+	for i in _markers.get_child_count():
+		(_markers.get_child(i) as MeshInstance3D).material_override = _marker_hot if i + 1 == _piece_joint else _marker_mat
+	if _piece_joint < 1:
+		_ghost.visible = false
+		_course_ghost.visible = false
+		return
+	_last_code = _build.validate_piece(_m.local_slot(), selected, _piece_joint, _flip)
 	var ok := _last_code == PlaceResult.OK
-	_ghost.mesh = _ribbon(track.piece_world_points(selected, _piece_start, _flip), track.track_width)
+	var pv := track.preview_insert(selected, _piece_joint, _flip)
+	_ghost.mesh = _ribbon(pv["piece"], track.track_width)
 	_ghost.global_transform = Transform3D()
-	_ghost_mat.albedo_color = Color(0.2, 1.0, 0.3, 0.45) if ok else Color(1.0, 0.2, 0.2, 0.45)
-	_ghost.visible = true
+	_ghost_mat.albedo_color = Color(0.2, 1.0, 0.3, 0.55) if ok else Color(1.0, 0.2, 0.2, 0.55)
+	_ghost.visible = _ghost.mesh != null
+	_course_ghost.mesh = _ribbon(pv["course"], track.track_width * 0.5, 0.15)
+	_course_ghost.global_transform = Transform3D()
+	_course_mat.albedo_color = Color(0.3, 1.0, 0.4, 0.22) if ok else Color(1.0, 0.3, 0.3, 0.22)
+	_course_ghost.visible = _course_ghost.mesh != null
+	var flip_txt := " · R flips it" if track.is_flippable(selected) else ""
 	if ok:
-		_reason.text = "R flips it"
-	elif _last_code in [PlaceResult.NO_BUILD_ZONE, PlaceResult.OFF_TRACK, PlaceResult.TOO_CLOSE, PlaceResult.BLOCKS_PATH]:
-		_reason.text = Track.splice_text(_build.last_splice_code)
+		_reason.text = "LMB: insert here%s" % flip_txt
+	elif _last_code in [PlaceResult.NO_BUILD_ZONE, PlaceResult.BLOCKS_PATH, PlaceResult.UNKNOWN_ITEM]:
+		_reason.text = Track.insert_text(_build.last_insert_code) + flip_txt
 	else:
 		_reason.text = PlaceResult.describe(_last_code)
 
 
+## One disc per insertable joint (rebuilt when the course changes).
+func _update_markers(joints: Array[float]) -> void:
+	_markers.visible = true
+	var key := "%d %.2f" % [joints.size(), _m.track.length()]
+	if key == _marker_key:
+		return
+	_marker_key = key
+	_last_key = "" # WHY: the course changed, so the highlighted marker and ghost must be redone
+	for c in _markers.get_children():
+		c.queue_free()
+		_markers.remove_child(c)
+	var disc := CylinderMesh.new()
+	disc.top_radius = 2.2
+	disc.bottom_radius = 2.2
+	disc.height = 0.3
+	for k in range(1, joints.size() - 1):
+		var mi := MeshInstance3D.new()
+		mi.mesh = disc
+		mi.material_override = _marker_mat
+		_markers.add_child(mi)
+		mi.position = _m.track.point_at(joints[k]) + Vector3.UP * 0.4 # top_level parent at the origin
+
+
 ## Flat translucent road strip `width` m wide along world points `pts`, lifted a little above the road.
-static func _ribbon(pts: PackedVector3Array, width: float) -> ArrayMesh:
+static func _ribbon(pts: PackedVector3Array, width: float, lift := 0.25) -> ArrayMesh:
 	if pts.size() < 2:
 		return null
 	var st := SurfaceTool.new()
@@ -222,7 +295,7 @@ static func _ribbon(pts: PackedVector3Array, width: float) -> ArrayMesh:
 		var a := pts[maxi(i - 1, 0)]
 		var b := pts[mini(i + 1, pts.size() - 1)]
 		var right := (b - a).cross(Vector3.UP).normalized() * width * 0.5
-		var up := Vector3.UP * 0.25
+		var up := Vector3.UP * lift
 		st.add_vertex(pts[i] - right + up)
 		st.add_vertex(pts[i] + right + up)
 	return st.commit()
@@ -271,7 +344,7 @@ func _target_piece(pos: Vector3) -> bool:
 		_ghost_mat.albedo_color = Color(1.0, 0.15, 0.1, 0.5)
 		_ghost.visible = true
 		var d := ItemDB.get_def(e["id"])
-		_reason.text = "Click to remove %s (restores the road)" % (d.display_name if d else String(e["id"]))
+		_reason.text = "Click to remove %s (the gap closes)" % (d.display_name if d else String(e["id"]))
 		return true
 	return false
 
@@ -296,10 +369,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	var flip_key: bool = event is InputEventKey and event.pressed and not event.echo \
 		and (event as InputEventKey).keycode == KEY_R
 	if piece and (flip_key or event.is_action_pressed(&"build_rotate_left") or event.is_action_pressed(&"build_rotate_right")):
-		_flip = not _flip
+		_flip = not _flip and _m.track.is_flippable(selected)
 	elif piece and event.is_action_pressed(&"build_place"):
-		if _ghost.visible:
-			_build.request_piece(selected, _piece_start, _flip)
+		if _piece_joint >= 1:
+			_build.request_piece(selected, _piece_joint, _flip)
 	elif event.is_action_pressed(&"build_rotate_left"):
 		_yaw_steps += 1
 	elif event.is_action_pressed(&"build_rotate_right"):

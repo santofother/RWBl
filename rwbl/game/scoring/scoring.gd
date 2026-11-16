@@ -1,8 +1,8 @@
 class_name Scoring
 extends Node
 ## Points per round (DESIGN §6) incl. the anti-grief rule, totals, score screen. Owner: C11.
-## NET: host listens to GameEvents (chariot_finished, race_over, trap_hit, kill, self_kill, clean_lap, lap_completed,
-##   chariot_died, chariot_respawned, item_placed, item_removed) and computes at race_over; it broadcasts by RPC, and
+## NET: host listens to GameEvents (chariot_finished, race_over, trap_hit, kill, self_kill, clean_lap (C23: clean run,
+##   once at the finish), chariot_died, chariot_respawned, item_placed, item_removed) and computes at race_over; it broadcasts by RPC, and
 ##   every peer then updates totals and emits GameEvents.round_scored. Clients only read.
 ## Finish card (C12, user request): host sends `finish_card` to all when a chariot finishes; FinishScreen shows it.
 ## Public API: match_setup(m), provisional_points(slot, place), signal finish_card, get_totals() -> Dictionary slot -> int, get_round_points() -> Dictionary slot -> int,
@@ -83,12 +83,10 @@ func configure(slots: Array[int], progress_fn: Callable, item_progress_fn: Calla
 	GameEvents.item_placed.connect(_on_item_placed)
 	GameEvents.item_removed.connect(func(uid: int) -> void: _items.erase(uid))
 	# FIX(C19, Claude): a track piece moves every later item's progress; re-read it from the stored position.
-	GameEvents.track_changed.connect(func() -> void:
-		for uid: int in _items:
-			if _items[uid].has("pos"):
-				_items[uid]["progress"] = float(_item_progress_fn.call(_items[uid]["pos"])))
+	# FIX(C22, Claude): items after a joint move with the course right after the change; re-read their node position.
+	GameEvents.track_changed.connect(_reread_items.call_deferred)
 	GameEvents.chariot_finished.connect(func(slot: int, place: int, _t: float) -> void: _finish_place[slot] = place)
-	GameEvents.lap_completed.connect(func(slot: int, _l: int, _c: bool) -> void: _bump(_laps, slot))
+	# C23: no laps (one run start -> finish), so lap_completed earns nothing; clean_lap = clean run, once.
 	GameEvents.clean_lap.connect(func(slot: int, _l: int) -> void: _bump(_clean, slot))
 	GameEvents.trap_hit.connect(_on_trap_hit)
 	GameEvents.kill.connect(func(k: int, _v: int, _c: StringName) -> void: _bump(_kills, k))
@@ -238,6 +236,16 @@ func _clean_pass(uid: int) -> bool:
 		if not died.has(s):
 			return true
 	return false
+
+
+func _reread_items() -> void:
+	var nodes: Dictionary = _m.build.items() if _m and _m.build else {}
+	for uid: int in _items:
+		var it: Node3D = nodes.get(uid)
+		if it and is_instance_valid(it):
+			_items[uid]["pos"] = it.global_position
+		if _items[uid].has("pos"):
+			_items[uid]["progress"] = float(_item_progress_fn.call(_items[uid]["pos"]))
 
 
 func _on_item_placed(uid: int, item_id: StringName, owner_slot: int, xform: Transform3D) -> void:
