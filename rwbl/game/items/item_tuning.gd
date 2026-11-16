@@ -24,3 +24,16 @@ extends Resource
 @export_range(5.0, 85.0) var axe_swing_deg := 60.0 # TUNE: amplitude
 @export_range(0.0, 5.0) var axe_stun := 1.0 # TUNE: s
 @export_range(0.0, 20.0) var axe_knockback := 6.0 # TUNE: m/s sideways
+@export_group("Chaos items (C25)")
+@export_range(0.0, 40.0) var bumper_push := 16.0 # TUNE: m/s shove away from the bumper centre
+@export_range(0.0, 3.0) var bumper_stun := 0.3 # TUNE: s of lost control after a bump
+@export_range(0.5, 10.0) var dung_drunk_time := 3.0 # TUNE: s of DRUNK wobble after stepping in lion dung
+@export_range(0.0, 3.0) var dung_nosteer_time := 0.8 # TUNE: s of no steering after stepping in it
+@export_range(0.0, 20.0) var dung_spin_kick := 6.0 # TUNE: m/s sideways shove (the slip)
+@export_range(0.0, 40.0) var catapult_up := 14.0 # TUNE: m/s upward lob
+@export_range(0.0, 50.0) var catapult_forward := 14.0 # TUNE: m/s extra forward
+@export_range(0.0, 3.0) var whirlwind_stun := 0.4 # TUNE: s stun on first contact
+@export_range(0.0, 3.0) var whirlwind_drunk_time := 2.0 # TUNE: s of DRUNK refreshed while inside
+@export_range(0.0, 60.0) var whirlwind_swirl := 22.0 # TUNE: m/s² sideways swirl push while inside
+@export_range(0.0, 20.0) var whirlwind_lift := 3.0 # TUNE: m/s upward hop on first contact
+@export_range(0.5, 10.0) var spikelog_period := 3.0 # TUNE: s per full turn of the spiked log

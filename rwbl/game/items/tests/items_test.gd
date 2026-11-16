@@ -137,6 +137,11 @@ func _run_all() -> void:
 	await _pit()
 	await _slide_far()
 	await _removed_cleanup()
+	await _bumper()
+	await _dung()
+	await _catapult()
+	await _whirlwind()
+	await _spike_log()
 
 
 func _oil() -> void:
@@ -338,3 +343,86 @@ func _removed_cleanup() -> void:
 	var d := ItemDB.get_def(&"demolish")
 	_check(d != null and d.scene == null and BuildPhase.is_targeting(d) and d.category == ItemDef.Category.WILDCARD
 		and d.rarity == ItemDef.Rarity.UNCOMMON, "demolish def: uncommon wildcard targeting card")
+
+
+## C25 chaos items. Bumper: shoves the chariot sideways away from its centre.
+func _bumper() -> void:
+	var it := _place(&"bumper", START + 20.0, OTHER_SLOT, 1.0) # right of the road centre line
+	var right := track.transform_at(START + 20.0).basis.x
+	await _start(START, 12.0)
+	var side := [0.0]
+	await _drive(2.5, _inp(0.0), func() -> bool:
+		side[0] = minf(side[0], _c.velocity.dot(right))
+		return false)
+	_check(side[0] < -3.0, "bumper: shoved away from its centre (%.1f m/s sideways)" % side[0])
+	_check(_trap_for(it.uid).size() == 1, "bumper: trap_hit")
+	await _clear_items()
+
+
+## Lion dung: NO_STEER + DRUNK, then it vanishes (one use).
+func _dung() -> void:
+	var it := _place(&"lion_dung", START + 20.0)
+	await _start(START, 10.0)
+	var fx := [false, false]
+	await _drive(3.0, _inp(0.0), func() -> bool:
+		fx[0] = fx[0] or _c.has_effect(Effects.NO_STEER)
+		fx[1] = fx[1] or _c.has_effect(Effects.DRUNK)
+		return false)
+	_check(fx[0] and fx[1], "dung: NO_STEER and DRUNK applied")
+	await get_tree().physics_frame
+	_check(not it.visible, "dung: vanished after one use")
+	_check(_trap_for(it.uid).size() == 1, "dung: trap_hit")
+	await _clear_items()
+
+
+## Catapult: lobs a grounded chariot high and far along the road.
+func _catapult() -> void:
+	var it := _place(&"catapult", START + 20.0)
+	await _start(START, 12.0)
+	var peak := [0.0]
+	var air_t := [0]
+	var base_y := track.point_at(START).y
+	await _drive(3.0, _inp(0.0), func() -> bool:
+		peak[0] = maxf(peak[0], _c.global_position.y - base_y)
+		if not _c.grounded:
+			air_t[0] += 1
+		return false)
+	var prog := track.progress_at(_c.global_position)
+	_check(peak[0] > 3.0, "catapult: lobbed high (peak %.1f m)" % peak[0])
+	_check(prog > START + 20.0 + 15.0, "catapult: thrown far forward (progress %.1f)" % prog)
+	_check(_trap_for(it.uid).size() == 1, "catapult: trap_hit")
+	await _clear_items()
+
+
+## Whirlwind: stun + drunk wobble, and a sideways swirl while inside.
+func _whirlwind() -> void:
+	var it := _place(&"whirlwind", START + 20.0)
+	await _start(START, 6.0)
+	var fx := [false, false]
+	var side := [0.0]
+	var right := track.transform_at(START + 20.0).basis.x
+	await _drive(3.0, _inp(0.0), func() -> bool:
+		fx[0] = fx[0] or _c.has_effect(Effects.STUN)
+		fx[1] = fx[1] or _c.has_effect(Effects.DRUNK)
+		side[0] = maxf(side[0], absf(_c.velocity.dot(right)))
+		return false)
+	_check(fx[0] and fx[1], "whirlwind: stun and drunk applied")
+	_check(side[0] > 1.0, "whirlwind: swirled sideways (%.1f m/s)" % side[0])
+	_check(_trap_for(it.uid).size() == 1, "whirlwind: trap_hit")
+	await _clear_items()
+
+
+## Spiked log: a chariot parked in the log's sweep dies (cause spikes, credited to the owner).
+func _spike_log() -> void:
+	var it := _place(&"spike_log", START + 20.0)
+	_c.respawn(it.global_transform)
+	_c.global_position += it.global_basis.x * 1.8
+	_deaths.clear()
+	await get_tree().physics_frame
+	await _drive(it.tuning().spikelog_period * 1.5, _inp(0.0, 0.0, 1.0), func() -> bool: return _c.dead)
+	_check(_deaths.size() == 1 and _deaths[0] == [&"spikes", OTHER_SLOT, it.uid], "spike_log: died (spikes, owner, uid) %s" % [_deaths])
+	_check(_trap_for(it.uid).size() == 1, "spike_log: trap_hit")
+	var a1: float = it.call(&"log_angle", 5.0)
+	var a2: float = it.call(&"log_angle", 5.0 + Item.tuning().spikelog_period)
+	_check(is_equal_approx(fposmod(a2 - a1, TAU), 0.0) or is_equal_approx(fposmod(a2 - a1, TAU), TAU), "spike_log: sweep is periodic in NetClock time")
+	await _clear_items()
