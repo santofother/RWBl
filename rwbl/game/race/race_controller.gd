@@ -7,7 +7,9 @@ extends Node
 ## clients by RPC at STATE_HZ so `progress_of()` / `place_of()` / `is_finished()` read the same on every peer.
 ## Public API: match_setup(m), progress_of(slot), lap_of(slot) (always 1), place_of(slot), is_finished(slot),
 ##   finish_time_of(slot), race_time(), countdown_left(), is_racing(), finish_order(), notify_teleport(slot),
-##   to_go(slot) (m left to the finish line).
+##   to_go(slot) (m left to the finish line), cut_time() (C24).
+## C24 (user): once every human has finished, the race ends `MatchTuning.race_end_after_humans` s later even if
+##   bots are still driving (`[Race] HUMANS DONE cut=<s>`); cut_time() is that NetClock time on every peer.
 ## Logs: `[Race] Start`, `[Race] GO`, `[Race] CLEAN slot`, `[Race] FINISH slot place time`, `[Race] OVER ...`.
 # CONTRACT: race position = Track.progress_at (how far along the course), however the chariot got there
 #   (shortcuts count). A chariot finishes when it crosses the finish line plane (Track.finish_progress()) driving
@@ -40,6 +42,7 @@ var _dirty: Dictionary = {} # slot -> true if the chariot was hit this run
 var _hooked: Dictionary = {} # slot -> true once the `hit` signal is connected
 var _sync_accum := 0.0
 var _dead_since: Dictionary = {} # slot -> NetClock time it was seen dead
+var _cut_at := -1.0 # NetClock time the race is cut short after every human finished (all peers), -1 = none
 
 
 ## Called by MatchMode.setup() on every peer.
@@ -56,6 +59,7 @@ func _on_phase_changed(phase: int, _round: int) -> void:
 	_go_time = _start_time + COUNTDOWN
 	_over = false
 	_end_at = -1.0
+	_cut_at = -1.0
 	_order.clear()
 	_state.clear()
 	if not multiplayer.is_server():
@@ -98,6 +102,11 @@ func _physics_process(_delta: float) -> void:
 		elif now >= _m.phase_end_time - 0.2: # WHY: MatchMode times the phase out itself; report before it does
 			_end_race()
 			_end_at = now
+		elif _cut_at >= 0.0 and now >= _cut_at:
+			_end_race()
+		elif _cut_at < 0.0 and _humans_done():
+			_rpc_cut.rpc(minf(now + _m.tuning.race_end_after_humans, _m.phase_end_time - 0.2))
+			print("[Race] HUMANS DONE cut=%.1f" % _m.tuning.race_end_after_humans)
 	if _end_at >= 0.0 and now >= _end_at:
 		_end_at = -1.0
 		GameEvents.phase_end_requested.emit(Phase.RACE)
@@ -157,6 +166,11 @@ func is_racing() -> bool:
 ## Slots that finished, in order (host; clients see `is_finished` / `place_of`).
 func finish_order() -> Array[int]:
 	return _order
+
+
+## NetClock time the race will be cut short because every human finished, or -1. Every peer (C24).
+func cut_time() -> float:
+	return _cut_at
 
 
 ## Tell the race a chariot was moved on purpose (respawn): resync its tracked progress without crossing the
@@ -236,6 +250,24 @@ func _end_race() -> void:
 	GameEvents.race_over.emit(out)
 	_end_at = NetClock.now() + END_DELAY
 	_push_state()
+
+
+func _humans_done() -> bool: # NET: host. At least one human and every human finished.
+	if _m.tuning.race_end_after_humans <= 0.0:
+		return false
+	var humans := 0
+	for p in _m.players:
+		if p.is_bot:
+			continue
+		humans += 1
+		if not is_finished(p.slot):
+			return false
+	return humans > 0
+
+
+@rpc("authority", "call_local", "reliable")
+func _rpc_cut(at: float) -> void: # NET: every peer
+	_cut_at = at
 
 
 # ---------------------------------------------------------------- HUD sync

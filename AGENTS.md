@@ -105,6 +105,8 @@ Godot binary: `$GODOT`, default `/Users/santofothergill/Downloads/Godot.app/Cont
   piece entry is `piece_hairpin@joint,side,0[,slot]`: joint k = between course pieces k-1 and k, side < 0 =
   flipped left; `demolish@uid[,slot]`),
   `--no-bot-build` (host: bots place nothing).
+- Build view (C24, any scene with a match): `--test-cursor=<item_id>` (report a build cursor holding that card
+  without a mouse; other peers log `[Build] CURSOR <slot> <item>`).
 - Netcode (C07, any scene with `ChariotSync`): `--lag-ms=N` (simulated one-way delay on this peer's input /
   snapshot sends), `--loss=PCT` (simulated drop), `--no-predict` (own chariot interpolated like the others),
   `--net-autotest` (test driver for `chariot_net_test`). F3 also shows a net stats label top-right.

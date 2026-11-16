@@ -29,6 +29,8 @@ DONE (on main, date) · BLOCKED (reason)
 | C19 | Track pieces framework + hairpin, chicane | 4 | Claude pref · T1 | C16, C17 | DONE 2026-11-14 | c19-track-pieces |
 | C22 | Modular point-to-point course (pieces at joints) | 4 | Claude pref · T1 | C19 | DONE 2026-11-15 | c22-modular-course |
 | C23 | Race to the finish line (no laps, shortcuts count) | 4 | Either · T2 | C22 | DONE 2026-11-15 | c22-modular-course (with C22) |
+| C24 | Playtest fixes: draft, build pan/cursors/previews, deadly pit/axe, respawn wait, spectate, scoring | 4 | Claude (head) · T2 | C23 | DONE 2026-11-15 | c24-playtest-fixes |
+| C25 | Chaos items (Sonnet subagent) | 4 | Claude Sonnet · T3 | C10 | IN PROGRESS | c25-chaos-items |
 | C20 | Track pieces: hills, crest, banked turn | 4 | Claude pref · T2 | C22, C23 | READY | |
 | C21 | Track piece: spiral loop | 4 | Claude only · T1 | C20 | TODO | |
 | P1 | Playtest 1 (user + friends) | — | user | wave 3 | TODO | |

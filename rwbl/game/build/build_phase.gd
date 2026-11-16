@@ -7,7 +7,7 @@ extends Node
 ##   Bots: the host places their hands at random valid spots on BUILD. Clients call validate() locally only for
 ##   the green/red ghost preview (BuildUI); the host's answer is what counts.
 ## Hand: `m.draft.hand_of(slot)`, each entry placeable once. If that is empty and `rules.free_build` (default
-##   true until Draft is real) every ItemDB item is in the hand once. Budget = BuildTuning.budget cost per phase.
+##   false; `--free-build` turns it on) every ItemDB item is in the hand once. Budget = BuildTuning.budget cost per phase.
 ## A slot is finished when it pressed Done or nothing left in its hand fits the budget. All finished -> the host
 ##   ends the phase early (GameEvents.phase_end_requested(BUILD)). Items stay for the rest of the match.
 ## Test hook (CLI, host or client): `--test-place=item@progress,lateral,deg[,slot];item@...` places in order at
@@ -36,12 +36,14 @@ extends Node
 ##   is_targeting(def), remaining_hand(slot), budget_left(slot), is_finished(slot), items() -> Dictionary
 ##   uid -> Item, `tuning`, `path`, signal place_result. C22: request_piece(id, joint, flip),
 ##   place_piece_for_slot(slot, id, joint, flip) -> int, validate_piece(slot, id, joint, flip) -> int,
-##   `last_insert_code`.
+##   `last_insert_code`. C24: signal piece_inserted(uid, id, slot); children `Cursors` (BuildCursors) and `PlaceFx`.
 # CONTRACT: placement RPC is (item_id: StringName, xform: Transform3D); owner = sender's slot on the host.
 # CONTRACT: result codes are PlaceResult.*; spawned items live under MatchMode/Items named "Item<uid>".
 # CONTRACT: demolish RPC is (uid: int); owner = sender's slot on the host. Rejections reuse PlaceResult:
 #   WRONG_PHASE, NOT_IN_HAND (no targeting card left), OVER_BUDGET, UNKNOWN_ITEM (no item with that uid).
 
+## all · a track piece was inserted into the course (C24: PlaceFx flashes it). After Track.apply_insert.
+signal piece_inserted(uid: int, item_id: StringName, slot: int)
 ## Requester only: the host's answer to request_place().
 signal place_result(code: int, item_id: StringName)
 
@@ -297,7 +299,7 @@ func place_piece_for_slot(slot: int, item_id: StringName, joint: int, flip: bool
 ## Items `slot` may still place this phase (hand minus what it already placed, one entry each).
 func remaining_hand(slot: int) -> Array[StringName]:
 	var hand: Array[StringName] = _m.draft.hand_of(slot)
-	if hand.is_empty() and bool(_m.rules.get("free_build", true)):
+	if hand.is_empty() and bool(_m.rules.get("free_build", false)):
 		hand = ItemDB.ids()
 	for id: StringName in _placed.get(slot, []):
 		hand.erase(id) # erase() removes one occurrence
@@ -713,6 +715,7 @@ func _rpc_place_piece(uid: int, item_id: StringName, joint: int, flip: bool, slo
 	_spent[slot] = int(_spent.get(slot, 0)) + d.cost
 	_m.track.apply_insert(uid, item_id, joint, flip)
 	print("[Build] PIECE %d %s slot=%d joint=%d flip=%s" % [uid, item_id, slot, joint, flip])
+	piece_inserted.emit(uid, item_id, slot)
 
 
 @rpc("authority", "call_local", "reliable")

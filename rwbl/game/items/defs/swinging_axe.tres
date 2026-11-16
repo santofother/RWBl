@@ -7,7 +7,7 @@
 script = ExtResource("1")
 id = &"swinging_axe"
 display_name = "Swinging Axe"
-description = "A timed pendulum."
+description = "A huge pendulum blade. Touch it and you die: time your run."
 rarity = 1
 category = 1
 tags = Array[StringName]([&"heavy"])

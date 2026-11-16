@@ -16,6 +16,7 @@ extends Resource
 @export_range(5.0, 90.0) var build_time := 25.0 # TUNE: s, ends early once everyone placed
 @export_range(20.0, 240.0) var race_time := 90.0 # TUNE: s, ends early 3 s after the race is over
 @export_range(3.0, 30.0) var score_time := 10.0 # TUNE: s
+@export_range(0.0, 60.0) var race_end_after_humans := 8.0 # TUNE: s after every human finished, the race ends (bots still out there are placed by progress). 0 = off (C24)
 @export_group("Draft")
 @export_range(1, 5) var cards_per_hand := 3 # TUNE: cards dealt per player per round
 @export_range(0.0, 20.0) var weight_common := 6.0 # TUNE: relative draw weight of COMMON cards

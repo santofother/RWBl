@@ -53,7 +53,7 @@ DESIGN §8 `Transport` (same signals for ENet and Steam), so there is no extra w
 | `camera/` | C05 `race_camera.*`, C08 `build_camera.*`, C13 the rest (all in wave 3) | cameras + swing | `CameraDirector` |
 | `bots/` | C06 | `BotManager`, `BotDriver` | `compute_input(chariot, track, delta)` |
 | `net/` | C07 | `ChariotSync`: input up, snapshots down, interpolation, prediction, `--lag-ms` | §4 Sync |
-| `build/` | C08 | `BuildPhase`: cursor/ghost UI, placement RPC, validation, path check, bot placing | §4 Items |
+| `build/` | C08 (C24: cursors, ghosts, fx) | `BuildPhase`: cursor/ghost UI, placement RPC, validation, path check, bot placing; C24 `BuildCursors` (`Match/Build/Cursors`, other players' cursors), `ItemVisual` (script-free ghosts), `PlaceFx` | §4 Items |
 | `match/`, `draft/` | C09 | `MatchMode` phase loop, rounds (no cap, C16), dropouts; `Draft` dealing | §1 |
 | `items/` | C10 (+ wave 4 item cards) | `Item` base, `ItemDB`, `defs/*.tres`, `tag_table.tres`, item scenes | §4 Items |
 | `scoring/` | C11 | `Scoring`, score screen, anti-grief | `get_totals()` |

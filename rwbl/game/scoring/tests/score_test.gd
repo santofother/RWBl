@@ -67,23 +67,23 @@ func _basic() -> void:
 	GameEvents.chariot_died.emit(2, &"item", 2, 99)
 	_finish([1, 0, 2, 3, 4])
 	var bd := _sc.get_breakdown()
-	# slot 1: 1st=150 + fewest deaths(0 deaths: 0 and 1 tie) 50 = 200 (no lap points)
-	_eq("finish 1st + fewest deaths, no lap points", bd[1]["total"], 200)
-	# slot 0: 2nd=100 + clean run 25 + fewest 50 + 2 kills 120 = 295
-	_eq("two kills = +120, clean run, tie gets fewest-deaths", bd[0]["total"], 295)
-	_eq("kills column", bd[0]["kills"], 120)
-	# slot 2: 3rd=70 + self-kill -30 (1 death, no fewest) = 40
-	_eq("self-kill -1", bd[2]["total"], 40)
-	# slot 3: 4th=40 + died once = 40; slot 4: 5th=0 + mercy 25 = 25
-	_eq("4th place", bd[3]["total"], 40)
-	_eq("last place mercy", bd[4]["total"], 25)
-	_eq("round_scored fired", _got.get(1), 200)
-	_eq("totals accumulate", _sc.get_totals()[0], 295)
+	# slot 1: 1st=300 + fewest deaths(0 deaths: 0 and 1 tie) 60 = 360 (no lap points) (C24 numbers)
+	_eq("finish 1st + fewest deaths, no lap points", bd[1]["total"], 360)
+	# slot 0: 2nd=120 + clean run 30 + fewest 60 + 2 kills 144 = 354
+	_eq("two kills = +144, clean run, tie gets fewest-deaths", bd[0]["total"], 354)
+	_eq("kills column", bd[0]["kills"], 144)
+	# slot 2: 3rd=84 + self-kill -36 (1 death, no fewest) = 48
+	_eq("self-kill -1", bd[2]["total"], 48)
+	# slot 3: 4th=48 + died once = 48; slot 4: 5th=0 + mercy 30 = 30
+	_eq("4th place", bd[3]["total"], 48)
+	_eq("last place mercy", bd[4]["total"], 30)
+	_eq("round_scored fired", _got.get(1), 360)
+	_eq("totals accumulate", _sc.get_totals()[0], 354)
 
 
 func _traps() -> void:
 	_begin()
-	# 5 distinct items by owner 0, each hits one rival; everything passed by slot 1 -> cap 90. Owner hit ignored.
+	# 5 distinct items by owner 0, each hits one rival; everything passed by slot 1 -> cap 108. Owner hit ignored.
 	for i in 5:
 		_place(10 + i, 0, 100.0 + i)
 	_place(20, 1, 120.0)
@@ -94,7 +94,7 @@ func _traps() -> void:
 	_sc.check_passes()
 	_finish([1])
 	var bd := _sc.get_breakdown()
-	_eq("trap points capped at 90", bd[0]["traps"], 90)
+	_eq("trap points capped at 108", bd[0]["traps"], 108)
 	_eq("owner hit not counted", bd[1]["traps"], 0)
 
 
@@ -128,4 +128,4 @@ func _grief() -> void:
 	GameEvents.chariot_died.emit(2, &"item", 0, 32)
 	_sc.check_passes()
 	_finish([1, 2])
-	_eq("(c) one passes -> trap points count", _sc.get_breakdown()[0]["traps"], 60)
+	_eq("(c) one passes -> trap points count", _sc.get_breakdown()[0]["traps"], 72)

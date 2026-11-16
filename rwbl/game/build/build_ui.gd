@@ -10,6 +10,11 @@ extends CanvasLayer
 ## (bright) plus the whole course as it would be after the insert (faint), green/red with the reason. R (or Q/E)
 ## flips it left/right, LMB asks the host to insert it there (BuildPhase.request_piece). Demolish also
 ## highlights a placed piece's road.
+## C24 (user request): the held item's ghost is a see-through copy of the real item (ItemVisual) over a green/red
+## footprint plate; a held track piece shows its real road (walls + direction chevrons) and where every item after
+## the joint will move to (blue ghosts). Other players' cursors (BuildCursors) and placement flashes (PlaceFx) are
+## children of BuildPhase. Panning: right / middle drag anywhere, left drag while holding nothing, WASD; a right
+## click that did not drag still cancels.
 ## NET: local only. The host's answer (place_result) is what counts; the colour is only a preview.
 ## Public API: setup(m, build), `selected` (item id or &"").
 
@@ -40,6 +45,13 @@ var _markers: Node3D # track piece: one disc per joint
 var _marker_key := ""
 var _marker_mat: StandardMaterial3D
 var _marker_hot: StandardMaterial3D
+var _item_ghost: Node3D # C24: see-through copy of the held item
+var _item_ghost_ok := -1 # tint the item ghost has (1 ok, 0 bad)
+var _moved: Node3D # C24: ghosts of the items that move when the held piece goes in
+var _moved_views: Dictionary = {} # uid -> Node3D
+var _cursors: BuildCursors
+var _fx: PlaceFx
+var _ground := Vector3.ZERO # last ground point under the mouse
 
 
 ## Wire to the match. Called once by BuildPhase.
@@ -73,6 +85,19 @@ func setup(m: MatchMode, build: BuildPhase) -> void:
 	_marker_mat.albedo_color = Color(1.0, 0.85, 0.2, 0.8)
 	_marker_hot = _ghost_mat.duplicate()
 	_marker_hot.albedo_color = Color(1.0, 1.0, 1.0, 0.95)
+	_moved = Node3D.new()
+	_moved.name = "MovedGhosts"
+	_moved.top_level = true
+	_moved.visible = false
+	build.add_child.call_deferred(_moved)
+	_cursors = BuildCursors.new()
+	_cursors.name = "Cursors" # CONTRACT: Match/Build/Cursors on every peer (RPC path)
+	build.add_child.call_deferred(_cursors)
+	_cursors.setup(m, build)
+	_fx = PlaceFx.new()
+	_fx.name = "PlaceFx"
+	build.add_child.call_deferred(_fx)
+	_fx.setup(m, build)
 	build.place_result.connect(_on_place_result)
 	GameEvents.phase_changed.connect(_on_phase_changed)
 	_set_active(false)
@@ -96,7 +121,7 @@ func _build_widgets() -> void:
 		_build.request_done())
 	box.add_child(done)
 	var hint := Label.new()
-	hint.text = "Click an item, then:\nLMB place · RMB cancel\nDemolish: click a placed item\nQ / E rotate · R flip a track piece\nwheel zoom · WASD / middle-drag pan"
+	hint.text = "Click an item, then:\nLMB place · RMB cancel\nDemolish: click a placed item\nQ / E rotate · R flip a track piece\nPan: drag (right / middle mouse,\nor left with nothing held), WASD\nZoom: mouse wheel"
 	hint.modulate = Color(1, 1, 1, 0.7)
 	box.add_child(hint)
 	_reason = Label.new()
@@ -134,6 +159,11 @@ func _select(id: StringName) -> void:
 	if _course_ghost:
 		_course_ghost.visible = false
 		_markers.visible = false
+		_moved.visible = false
+	if _item_ghost:
+		_item_ghost.queue_free()
+		_item_ghost = null
+		_item_ghost_ok = -1
 	if _ghost:
 		_ghost.visible = false
 		var d := ItemDB.get_def(id)
@@ -141,9 +171,12 @@ func _select(id: StringName) -> void:
 			_ghost.mesh = null # built per position in _update_piece()
 		elif d and not BuildPhase.is_targeting(d):
 			var box := BoxMesh.new()
-			var h := 1.2 if d.blocks_path else 0.15
-			box.size = Vector3(d.footprint.x, h, d.footprint.y)
+			box.size = Vector3(d.footprint.x, 0.08, d.footprint.y) # C24: footprint plate under the item ghost
 			_ghost.mesh = box
+			_item_ghost = ItemVisual.ghost(d, Color(0.2, 1.0, 0.3, 0.3))
+			_item_ghost.top_level = true
+			_item_ghost.visible = false
+			_build.add_child(_item_ghost)
 
 
 func _refresh_hand() -> void:
@@ -178,14 +211,20 @@ func _process(delta: float) -> void:
 	if not _panel.visible:
 		return
 	_refresh_hand()
-	if selected == &"":
-		return
+	_m.cameras.build_camera.left_drag_pans = selected == &""
 	var cam := get_viewport().get_camera_3d()
 	if cam == null:
 		return
 	var hit: Variant = _ground_point(cam, get_viewport().get_mouse_position())
+	if hit != null:
+		_ground = hit
+	_cursors.report(_ground, selected, _ghost_xf, _piece_joint, _flip)
+	if selected == &"":
+		return
 	if hit == null:
 		_ghost.visible = false
+		if _item_ghost:
+			_item_ghost.visible = false
 		return
 	var pos: Vector3 = hit
 	if BuildPhase.is_targeting(ItemDB.get_def(selected)):
@@ -205,16 +244,21 @@ func _process(delta: float) -> void:
 	# WHY: items face along the road by default; Q/E turn them from there.
 	var basis := along.basis.rotated(Vector3.UP, yaw)
 	_ghost_xf = Transform3D(basis, pos)
-	var h := (_ghost.mesh as BoxMesh).size.y if _ghost.mesh else 0.1
-	_ghost.global_transform = Transform3D(basis, pos + Vector3.UP * h * 0.5)
+	_ghost.global_transform = Transform3D(basis, pos + Vector3.UP * 0.05)
 	_ghost.visible = true
+	if _item_ghost:
+		_item_ghost.global_transform = _ghost_xf
+		_item_ghost.visible = true
 	var key := "%s %s %d" % [selected, pos, _yaw_steps]
 	if key != _last_key:
 		_last_key = key
 		_last_code = _build.validate(_m.local_slot(), selected, _ghost_xf)
 		var ok := _last_code == PlaceResult.OK
 		_ghost_mat.albedo_color = Color(0.2, 1.0, 0.3, 0.55) if ok else Color(1.0, 0.2, 0.2, 0.55)
-		_reason.text = "" if ok else PlaceResult.describe(_last_code)
+		_reason.text = "LMB: place it here" if ok else PlaceResult.describe(_last_code)
+		if _item_ghost and _item_ghost_ok != int(ok):
+			_item_ghost_ok = int(ok)
+			ItemVisual.set_tint(_item_ghost, Color(0.2, 1.0, 0.3, 0.3) if ok else Color(1.0, 0.15, 0.1, 0.5))
 
 
 func _update_piece(pos: Vector3) -> void:
@@ -240,12 +284,14 @@ func _update_piece(pos: Vector3) -> void:
 	if _piece_joint < 1:
 		_ghost.visible = false
 		_course_ghost.visible = false
+		_moved.visible = false
 		return
 	_last_code = _build.validate_piece(_m.local_slot(), selected, _piece_joint, _flip)
 	var ok := _last_code == PlaceResult.OK
 	var pv := track.preview_insert(selected, _piece_joint, _flip)
-	_ghost.mesh = _ribbon(pv["piece"], track.track_width)
+	_ghost.mesh = ItemVisual.road_ghost(pv["piece"], track.track_width) # C24: the real road, walls + chevrons
 	_ghost.global_transform = Transform3D()
+	_update_moved(pv, joints[_piece_joint], ok)
 	_ghost_mat.albedo_color = Color(0.2, 1.0, 0.3, 0.55) if ok else Color(1.0, 0.2, 0.2, 0.55)
 	_ghost.visible = _ghost.mesh != null
 	_course_ghost.mesh = _ribbon(pv["course"], track.track_width * 0.5, 0.15)
@@ -259,6 +305,45 @@ func _update_piece(pos: Vector3) -> void:
 		_reason.text = Track.insert_text(_build.last_insert_code) + flip_txt
 	else:
 		_reason.text = PlaceResult.describe(_last_code)
+
+
+## C24: blue ghosts where every item after `joint_p` will sit once the piece is in (the rest of the course moves
+## rigidly by the transform from the old joint to the new piece's end).
+func _update_moved(pv: Dictionary, joint_p: float, ok: bool) -> void:
+	var pc: PackedVector3Array = pv["piece"]
+	_moved.visible = ok and pc.size() >= 2
+	if not _moved.visible:
+		return
+	var track := _m.track
+	var t_old := track.transform_at(joint_p)
+	var f_old := -t_old.basis.z
+	var e := pc[pc.size() - 1]
+	var f_new := e - pc[pc.size() - 2]
+	f_old.y = 0.0
+	f_new.y = 0.0
+	if f_old.length_squared() < 1e-6 or f_new.length_squared() < 1e-6:
+		_moved.visible = false
+		return
+	var a := Transform3D(Basis.looking_at(f_old.normalized(), Vector3.UP), t_old.origin)
+	var b := Transform3D(Basis.looking_at(f_new.normalized(), Vector3.UP), Vector3(e.x, t_old.origin.y, e.z))
+	var delta := b * a.affine_inverse()
+	var seen := {}
+	for uid: int in _build.items():
+		var it: Item = _build.items()[uid]
+		if not is_instance_valid(it) or it.def == null or track.progress_at(it.global_position) <= joint_p + 0.5:
+			continue
+		seen[uid] = true
+		var g: Node3D = _moved_views.get(uid)
+		if g == null:
+			g = ItemVisual.ghost(it.def, Color(0.3, 0.7, 1.0, 0.45))
+			_moved.add_child(g)
+			_moved_views[uid] = g
+		g.global_transform = delta * it.global_transform
+		g.visible = true
+	for uid: int in _moved_views.keys():
+		if not seen.has(uid):
+			(_moved_views[uid] as Node).queue_free()
+			_moved_views.erase(uid)
 
 
 ## One disc per insertable joint (rebuilt when the course changes).
@@ -364,6 +449,12 @@ func _ground_point(cam: Camera3D, mouse: Vector2) -> Variant:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not _panel.visible or selected == &"":
+		return
+	var rmb := event as InputEventMouseButton
+	if rmb and rmb.button_index == MOUSE_BUTTON_RIGHT: # C24: right-drag pans; a right click cancels
+		if not rmb.pressed and _m.cameras.build_camera.dragged_px < 8.0:
+			_select(&"")
+			_hand_key = ""
 		return
 	var piece := ItemDB.get_def(selected) != null and ItemDB.get_def(selected).is_piece()
 	var flip_key: bool = event is InputEventKey and event.pressed and not event.echo \

@@ -20,7 +20,9 @@ extends Resource
 @export_range(0.5, 40.0) var column_slide_decel := 10.0 # TUNE: m/s², x rule friction_mult
 @export_range(1.0, 100.0) var column_slide_max := 40.0 # TUNE: m
 @export_group("Swinging axe")
-@export_range(0.5, 8.0) var axe_period := 2.4 # TUNE: s per full swing
-@export_range(5.0, 85.0) var axe_swing_deg := 60.0 # TUNE: amplitude
+@export_range(0.5, 8.0) var axe_period := 2.0 # TUNE: s per full swing (C24: was 2.4)
+@export_range(5.0, 85.0) var axe_swing_deg := 70.0 # TUNE: amplitude (C24: was 60)
+## C24 (user: "not dangerous enough"): the blade kills on contact. Off = the old stun + knockback.
+@export var axe_lethal := true # TUNE
 @export_range(0.0, 5.0) var axe_stun := 1.0 # TUNE: s
 @export_range(0.0, 20.0) var axe_knockback := 6.0 # TUNE: m/s sideways

@@ -10,6 +10,9 @@ extends Node
 ## Deaths (host): forwards `Chariot.died` to GameEvents (chariot_died; kill when another player caused it
 ##   without an item; self_kill for an item the victim placed). Respawn after `respawn_delay` (+ `pit_penalty`
 ##   for &"pit") at `track.respawn_transform(death progress − respawn_back)`, then `chariot_respawned`.
+##   C24 (user): during a race the dead chariot also waits until another racer's progress has reached its death
+##   spot (`respawn_wait_for_pass`), at most `respawn_wait_max` s after dying. Every peer can read the wait with
+##   respawn_wait(slot) (HUD).
 ## Crow (all peers know who): a slot that finished the race, or died with < `crow_death_time_left` s of race
 ##   left (no respawn then), is a crow until the next race. Every `crow_drop_cooldown` s it may drop one
 ##   `mud_patch` (owner = the crow, so Scoring counts it): local player presses `action` (aimed at the screen
@@ -21,7 +24,7 @@ extends Node
 ## NET: rams, deaths, respawn, crow decisions on the host; crow state + drops broadcast by RPC; visuals on all.
 ## Public API: match_setup(m), register_chariot(slot, c), is_crow(slot), crows(), crow_cooldown_left(slot),
 ##   request_crow_drop(pos), crow_drop(slot, pos) -> uid (host), set_crow(slot, on) (host), `tuning`,
-##   `respawn_delay` (read-only), `track`, `spawner`, signal crow_changed.
+##   `respawn_delay` (read-only), `track`, `spawner`, signal crow_changed, respawn_wait(slot) (C24).
 ## Logs: `[Combat] RAM <winner> > <loser> <part> <what>`, `[Combat] DIED`, `[Combat] RESPAWN`, `[Combat] CROW`,
 ##   `[Combat] CROW_DROP <slot> <uid>`.
 
@@ -58,6 +61,8 @@ var _crow_ready_at: Dictionary = {} # slot -> _time of the next allowed drop (al
 var _crow_items: Array[int] = [] # uids of crow drops this race (all peers)
 var _seen_wheels: Dictionary = {} # slot -> wheel bits already shown (visuals)
 var _seen_dead: Dictionary = {} # slot -> dead already shown (visuals)
+var _died_at: Dictionary = {} # slot -> _time of death (host)
+var _waits: Dictionary = {} # slot -> {progress, max_at (NetClock)} while waiting for a pass (all peers)
 
 
 func _ready() -> void:
@@ -89,6 +94,12 @@ func register_chariot(slot: int, node: Node3D) -> void:
 	if not c.died.is_connected(_on_died):
 		c.died.connect(_on_died.bind(slot))
 		c.hit.connect(_on_hit.bind(slot))
+
+
+## While `slot` is dead in a race and waits for a rival to pass its death spot: {"progress": m along the course,
+## "max_at": NetClock time it respawns anyway}. Empty otherwise. Every peer (C24).
+func respawn_wait(slot: int) -> Dictionary:
+	return _waits.get(slot, {})
 
 
 ## True if `slot` is a crow this race (every peer).
@@ -165,7 +176,7 @@ func _physics_process(delta: float) -> void:
 		if _pair_cd[k] <= 0.0:
 			_pair_cd.erase(k)
 	for slot: int in _respawn_at.keys():
-		if _time >= float(_respawn_at[slot]):
+		if _time >= float(_respawn_at[slot]) and _may_respawn(slot):
 			_respawn(slot)
 	if tuning.bot_crows_drop and _m and _m.phase == Phase.RACE:
 		for slot: int in _crows:
@@ -250,11 +261,38 @@ func _on_died(cause: StringName, source_slot: int, item_uid: int, slot: int) -> 
 		set_crow(slot, true)
 	else:
 		_respawn_at[slot] = _time + tuning.respawn_delay + (tuning.pit_penalty if cause == &"pit" else 0.0)
+		_died_at[slot] = _time
+		if _waits_for_pass():
+			_rpc_wait.rpc(slot, float(_death_progress.get(slot, 0.0)), NetClock.now() + tuning.respawn_wait_max)
 	print("[Combat] DIED %d %s by %d item %d%s" % [slot, cause, source_slot, item_uid, " -> crow" if crow else ""])
+
+
+## C24: in a race, respawn only once another racer reached the death spot (or respawn_wait_max passed). NET: host
+func _may_respawn(slot: int) -> bool:
+	if not _waits.has(slot) or not _waits_for_pass():
+		return true
+	if _time - float(_died_at.get(slot, _time)) >= tuning.respawn_wait_max:
+		return true
+	var at := float(_death_progress.get(slot, 0.0))
+	var others := 0
+	for p in _m.players:
+		if p.slot == slot:
+			continue
+		others += 1
+		if _m.race.is_finished(p.slot) or _m.race.progress_of(p.slot) >= at:
+			return true
+	return others == 0
+
+
+func _waits_for_pass() -> bool: # NET: host
+	return tuning.respawn_wait_for_pass and _m != null and _m.phase == Phase.RACE and _m.race.is_racing()
 
 
 func _respawn(slot: int) -> void: # NET: host
 	_respawn_at.erase(slot)
+	_died_at.erase(slot)
+	if _waits.has(slot):
+		_rpc_wait.rpc(slot, -1.0, 0.0)
 	var c: Chariot = _chariots.get(slot)
 	if c == null or not c.dead:
 		return
@@ -293,6 +331,8 @@ func _on_phase_changed(phase: int, _round: int) -> void: # NET: every peer
 		_crow_ready_at.clear()
 		_respawn_at.clear()
 		_pair_cd.clear()
+		_died_at.clear()
+		_waits.clear()
 	elif not _crow_items.is_empty():
 		for uid in _crow_items:
 			var it := _m.items_root.get_node_or_null(NodePath("Item%d" % uid)) if _m else null
@@ -351,6 +391,14 @@ static func _team_color(c: Chariot) -> Color:
 
 
 # ---------------------------------------------------------------- RPCs
+
+@rpc("authority", "call_local", "reliable")
+func _rpc_wait(slot: int, progress: float, max_at: float) -> void: # NET: every peer. progress < 0 = done waiting
+	if progress < 0.0:
+		_waits.erase(slot)
+	else:
+		_waits[slot] = {"progress": progress, "max_at": max_at}
+
 
 @rpc("authority", "call_local", "reliable")
 func _rpc_crow(slot: int, on: bool) -> void: # NET: every peer

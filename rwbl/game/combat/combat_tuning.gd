@@ -15,6 +15,10 @@ extends Resource
 @export_range(1.0, 15.0) var crawl_wreck_time := 4.0 # TUNE: s crawling on no wheels before the chariot wrecks and respawns
 @export_group("Respawn")
 @export_range(0.3, 3.0) var respawn_delay := 2.0 # TUNE: s dead before respawn (DESIGN: back in < 3 s)
+## C24 (user): in a race you also wait until another racer has passed the spot where you died, so crashing
+## out of the lead costs the lead. 0 = off (plain respawn_delay).
+@export var respawn_wait_for_pass := true # TUNE
+@export_range(2.0, 30.0) var respawn_wait_max := 8.0 # TUNE: s dead at most, even if nobody passes (never stuck)
 @export_range(0.0, 0.95) var pit_penalty := 0.8 # TUNE: extra s after a pit death (keep delay + this < 3)
 @export_range(0.0, 40.0) var respawn_back := 10.0 # TUNE: m behind the death spot along the track
 @export_group("Crow")

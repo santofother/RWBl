@@ -282,10 +282,13 @@ func _axe() -> void:
 			var under := (_c.global_position - axe_at).dot(_c.get_forward()) > -0.5
 			return _inp(0.0, 0.0 if under else 0.4, 1.0 if under else 0.0),
 		func() -> bool:
-		if _c.has_effect(Effects.STUN) and hit_angle[0] == INF:
+		if (_c.dead or _c.has_effect(Effects.STUN)) and hit_angle[0] == INF:
 			hit_angle[0] = rad_to_deg(it.call(&"swing_angle"))
 		return hit_angle[0] != INF)
-	_check(hit_angle[0] != INF, "axe: blade hit the chariot (stunned)")
+	_check(hit_angle[0] != INF, "axe: blade hit the chariot")
+	# C24: the blade is lethal by default
+	_check(_c.dead and _deaths.size() >= 1 and _deaths[-1] == [&"axe", OTHER_SLOT, it.uid],
+		"axe: lethal, died (axe, owner, uid) %s" % [_deaths])
 	_check(absf(hit_angle[0]) < 35.0, "axe: hit inside the swing window (angle %.0f deg)" % hit_angle[0])
 	var a1: float = it.call(&"swing_angle", 10.0)
 	var a2: float = it.call(&"swing_angle", 10.0 + Item.tuning().axe_period)

@@ -11,6 +11,8 @@ extends Node
 ## NET: host deals and sends each human only its own cards (RPC to that peer -> hand_dealt there); bots are dealt
 ##   and pick on the host. Clients send picks with submit_pick(); the host checks them and, at the end of the
 ##   phase, broadcasts every kept card (hands_final on all peers). Hands are cleared when SCORE starts.
+## C24: a client that has no cards `RESEND_AFTER` s into DRAFT asks the host to send them again
+##   (`[Draft] RESEND slot`), so a late or lost deal never leaves a player without a draft screen.
 ## Logs: `[Draft] DEAL slot id,id,id rarity=r,r,r [leader|last]`, `[Draft] KEEP slot id [timeout]`,
 ##   `[Draft] CATCHUP last=[..] leader=[..] best_rarity=N`, `[Draft] ALL PICKED`.
 ## Public API: match_setup(m), cards_of(slot), hand_of(slot), has_picked(slot), submit_pick(indices),
@@ -30,6 +32,9 @@ var _m: MatchMode
 var _cards: Dictionary = {} # slot -> Array[StringName] dealt this round (host: all; client: own slot)
 var _hands: Dictionary = {} # slot -> Array[StringName] kept this round
 var _rng := RandomNumberGenerator.new()
+## C24: seconds into DRAFT before a client without cards asks the host again (then every RESEND_AFTER s).
+const RESEND_AFTER := 1.0
+var _ask_at := 0.0 # local clock time of the next resend request (client)
 
 
 ## Called by MatchMode.setup() on every peer.
@@ -85,7 +90,29 @@ func finish_draft() -> void:
 	_rpc_hands_final.rpc(out)
 
 
+func _process(_delta: float) -> void:
+	if _m == null or multiplayer.is_server() or _m.phase != Phase.DRAFT:
+		return
+	var slot := _m.local_slot()
+	var now := Time.get_ticks_msec() * 0.001
+	if slot < 0 or _cards.has(slot) or now < _ask_at or bool(_m.rules.get("free_build", false)):
+		return
+	_ask_at = now + RESEND_AFTER
+	_rpc_resend.rpc_id(1)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _rpc_resend() -> void: # NET: host. A client is missing its cards: send them again.
+	var slot := _m.slot_of_peer(multiplayer.get_remote_sender_id())
+	if slot < 0 or _m.phase != Phase.DRAFT or not _cards.has(slot):
+		return
+	print("[Draft] RESEND %d" % slot)
+	_rpc_dealt.rpc_id(multiplayer.get_remote_sender_id(), slot, _cards[slot])
+
+
 func _on_phase_changed(p: int, r: int) -> void:
+	if p == Phase.DRAFT:
+		_ask_at = Time.get_ticks_msec() * 0.001 + RESEND_AFTER
 	if p == Phase.SCORE:
 		_cards.clear()
 		_hands.clear()

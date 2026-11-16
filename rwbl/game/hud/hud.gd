@@ -8,6 +8,7 @@ extends CanvasLayer
 ## Public API: match_setup(m); view setters used by the match and by `tests/hud_preview.tscn` with fake data:
 ##   show_race(d), show_draft(cards, picked, frac_left, status), show_phase(text, secs), hide_all(),
 ##   style_build_ui(ui), texts() -> Dictionary (what is on screen, for tests); signal pick_confirmed(index).
+## C24: a notice line under the countdown in Race (`d["notice"]`): waiting to respawn, spectating, race cut short.
 ## Logs: `[HUD] DRAFT show slot ids`, `[HUD] PICK index id`.
 
 ## Local player pressed Confirm on card `index` (0..2). Fires before Draft.submit_pick() is called.
@@ -36,6 +37,7 @@ var _wheel_l: ColorRect
 var _wheel_r: ColorRect
 var _ammo_label: Label
 var _count_label: Label
+var _notice_label: Label # C24
 # phase strip (every phase)
 var _phase_label: Label
 var _timer_label: Label
@@ -162,6 +164,12 @@ func _build_race() -> void:
 	_count_label.grow_vertical = Control.GROW_DIRECTION_BOTH
 	_count_label.add_theme_constant_override(&"outline_size", 20)
 	_race_box.add_child(_count_label)
+	_notice_label = _label("", 38, HORIZONTAL_ALIGNMENT_CENTER) # C24
+	_notice_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_notice_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_notice_label.offset_top = 150
+	_notice_label.add_theme_constant_override(&"outline_size", 10)
+	_race_box.add_child(_notice_label)
 
 
 func _wheel_icon(parent: Control) -> ColorRect:
@@ -252,6 +260,7 @@ func show_race(d: Dictionary) -> void:
 		_count_label.text = "GO!"
 	else:
 		_count_label.text = ""
+	_notice_label.text = String(d.get("notice", ""))
 
 
 ## Draft screen for the local player. `cards` = ItemDef ids; `picked` locks the choice; frac_left 0..1.
@@ -293,7 +302,7 @@ func texts() -> Dictionary:
 	return {"lap": _lap_label.text.trim_prefix("LAP "), "place": _place_label.text, "ammo": _ammo_label.text,
 		"count": _count_label.text, "phase": _phase_label.text, "timer": _timer_label.text,
 		"stamina": _stam_label.text, "draft_cards": _card_panels.size(), "draft_visible": _draft_box.visible,
-		"race_visible": _race_box.visible, "status": _draft_status.text}
+		"race_visible": _race_box.visible, "status": _draft_status.text, "notice": _notice_label.text}
 
 
 ## 1 -> "1st", 2 -> "2nd", 3 -> "3rd", 4 -> "4th"...
@@ -475,7 +484,31 @@ func _update_race(slot: int, delta: float) -> void:
 	_was_racing = racing
 	_go_left = maxf(0.0, _go_left - delta)
 	d["go"] = _go_left > 0.0
+	d["notice"] = _race_notice(slot, ch)
 	show_race(d)
+
+
+## C24: one line about respawn waits, spectating and the race being cut short.
+func _race_notice(slot: int, ch: Chariot) -> String:
+	var lines: Array[String] = []
+	var now := NetClock.now()
+	if ch and ch.dead:
+		var w := _m.combat.respawn_wait(slot)
+		if not w.is_empty():
+			lines.append("CRASHED! Back in when a rival passes your spot (max %d s)" % ceili(maxf(0.0, float(w["max_at"]) - now)))
+		elif not _m.combat.is_crow(slot):
+			lines.append("CRASHED! Respawning...")
+	var cams := _m.cameras
+	if cams.spectating_other():
+		var pl := _m.get_player(cams.spectate_slot)
+		lines.append("Spectating %s  ·  ← / → switch%s" % [pl.name if pl else "?",
+			"  ·  V: your chariot" if _m.race.is_finished(slot) else ""])
+	elif _m.race.is_finished(slot):
+		lines.append("V: spectate the others")
+	var cut := _m.race.cut_time()
+	if cut >= 0.0 and _m.race.is_racing():
+		lines.append("Race ends in %d s" % ceili(maxf(0.0, cut - now)))
+	return "\n".join(lines)
 
 
 func _restyle_build() -> void:

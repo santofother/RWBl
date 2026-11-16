@@ -7,21 +7,21 @@ extends Resource
 # CONTRACT: tuning resources use @export_range so TuningPanel can build sliders.
 
 @export_group("Finish")
-@export_range(-100, 500, 5) var finish_1st := 150 # TUNE
-@export_range(-100, 500, 5) var finish_2nd := 100 # TUNE
-@export_range(-100, 500, 5) var finish_3rd := 70 # TUNE
-@export_range(-100, 500, 5) var finish_4th := 40 # TUNE
-@export_range(-100, 500, 5) var finish_5th := 0 # TUNE
+@export_range(-100, 600, 1) var finish_1st := 300 # TUNE: C24 (user): race win x2 (was 150)
+@export_range(-100, 600, 1) var finish_2nd := 120 # TUNE: C24: everything but the win x1.2 (was 100)
+@export_range(-100, 600, 1) var finish_3rd := 84 # TUNE (was 70)
+@export_range(-100, 600, 1) var finish_4th := 48 # TUNE (was 40)
+@export_range(-100, 600, 1) var finish_5th := 0 # TUNE
 @export_group("Traps and combat")
-@export_range(0, 200, 5) var trap_hit := 30 # TUNE: your item hit another player
-@export_range(0, 500, 5) var trap_cap := 90 # TUNE: max trap points per round
-@export_range(0, 500, 5) var kill := 60 # TUNE: per kill (spear, wheel, ram)
-@export_range(-200, 0, 5) var self_kill := -30 # TUNE: died to your own trap
+@export_range(0, 200, 1) var trap_hit := 36 # TUNE: your item hit another player
+@export_range(0, 500, 1) var trap_cap := 108 # TUNE: max trap points per round
+@export_range(0, 500, 1) var kill := 72 # TUNE: per kill (spear, wheel, ram)
+@export_range(-200, 0, 1) var self_kill := -36 # TUNE: died to your own trap
 @export_group("Laps and bonuses")
 @export_range(0, 200, 5) var lap := 25 # TUNE: unused since C23 (no laps); kept so old .tres files load
-@export_range(0, 200, 5) var clean_lap := 25 # TUNE: clean run (no collisions start -> finish), once
-@export_range(0, 200, 5) var mercy := 25 # TUNE: last to finish
-@export_range(0, 500, 5) var fewest_deaths := 50 # TUNE: fewest deaths this round (ties all get it)
+@export_range(0, 200, 1) var clean_lap := 30 # TUNE: clean run (no collisions start -> finish), once
+@export_range(0, 200, 1) var mercy := 30 # TUNE: last to finish
+@export_range(0, 500, 1) var fewest_deaths := 60 # TUNE: fewest deaths this round (ties all get it)
 @export_group("Anti-grief")
 ## Items that are help, not traps: hitting a rival with them pays nothing.
 @export var non_trap_items: Array[StringName] = [&"speed_pad"] # TUNE

@@ -7,7 +7,7 @@
 script = ExtResource("1")
 id = &"pit"
 display_name = "Pit"
-description = "Fall in, respawn with a time penalty."
+description = "Spiked pit: instant death. Jump it or go around."
 rarity = 1
 category = 1
 tags = Array[StringName]([])
