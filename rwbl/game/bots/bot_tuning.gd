@@ -20,6 +20,12 @@ extends Resource
 @export_group("Loop")
 @export_range(10.0, 150.0) var loop_prep := 70.0 # TUNE: m before a loop (C21) the bot goes flat out and whips
 @export_range(0.0, 1.0) var loop_whip_stamina := 0.15 # TUNE: whips before a loop above this stamina
+@export_group("Slopes")
+## C20: hills, crests, banked turns.
+@export_range(5.0, 60.0) var crest_accel := 18.0 # TUNE: m/s²; bots slow for a crest so speed² × its curvature stays under this (gravity 25 = where the wheels lift)
+@export_range(10.0, 80.0) var crest_preview := 30.0 # TUNE: m of road checked for crests (+ 0.5 s at the current speed)
+@export_range(0.0, 5.0) var bank_inside := 2.0 # TUNE: m towards the inside of a banked turn
+@export_range(0.0, 40.0) var bank_lat_bonus := 12.0 # TUNE: m/s² extra corner accel per unit sin(tilt) (the chariot grips better on a bank)
 @export_group("Traffic")
 @export_range(1.0, 10.0) var lane_gap := 3.0 # TUNE: m of lateral clearance kept from other chariots
 @export_range(5.0, 40.0) var traffic_range := 18.0 # TUNE: m ahead we react to chariots / items

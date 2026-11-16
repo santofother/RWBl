@@ -6,6 +6,8 @@ extends RefCounted
 ## lateral offset around other chariots and `blocks_path` items, and reverses out when stuck.
 ## C21 loops: from `loop_prep` m before a loop it goes flat out (no braking for the loop's "curvature") and whips;
 ## inside the loop it holds full throttle and doesn't steer.
+## C20 slopes: slows for crests ahead (`crest_accel`, so it doesn't fly off them), corners faster on a banked turn
+## (`bank_lat_bonus`) and holds a line `bank_inside` m towards its inside. Curvature ignores pitch (hills).
 ## Uses only public APIs of Chariot, Track, Item, so C04/C05 changes don't break it.
 ## NET: host only. Public API: `compute_input(chariot, track, delta) -> ChariotInput`, `tuning`, `seed_slot(slot)`,
 ##   `stuck_count`.
@@ -29,6 +31,7 @@ var _whip_wait := 0.0
 var _lane_bad := PackedInt32Array() # bad-surface samples per candidate lane, refreshed at SCAN_HZ
 var _scan_wait := 0.0
 var _patch_ahead := false # chosen lane still crosses a bad surface within reach
+var _bank_shift := 0.0 # C20: m towards the inside of a banked turn ahead (+ = right)
 
 
 ## Give this bot its personal spread (deterministic per slot).
@@ -73,6 +76,8 @@ func compute_input(chariot: Chariot, track: Track, delta: float) -> ChariotInput
 
 	var t := tuning
 	var look := t.look_base + speed * t.look_speed
+	var bank := _bank_at(track, p + look)
+	_bank_shift = t.bank_inside * clampf(bank / 0.25, -1.0, 1.0)
 	_update_offset(chariot, track, p, look, delta)
 	var right := track.transform_at(p + look).basis.x
 	var target := track.point_at(p + look) + right * _offset
@@ -89,7 +94,12 @@ func compute_input(chariot: Chariot, track: Track, delta: float) -> ChariotInput
 	# Curvature ahead -> wanted speed.
 	var curve := _max_curve(track, p, minf(t.preview, maxf(to_loop - 2.0, 4.0)))
 	var lat := t.corner_lat_accel * _skill * (0.8 + 0.4 * t.aggression)
+	lat += t.bank_lat_bonus * _max_bank(track, p, minf(t.preview, maxf(to_loop - 2.0, 4.0)))
 	var want := clampf(sqrt(lat / maxf(curve, 0.0005)), t.min_corner_speed, 60.0)
+	if track.has_height(): # C20: don't fly off crests
+		var crest := _max_crest(track, p, minf(t.crest_preview + speed * 0.5, to_loop - 2.0)) # WHY: a loop's top is no crest
+		if crest > 0.0005:
+			want = minf(want, maxf(sqrt(t.crest_accel / crest), t.min_corner_speed))
 	if _patch_ahead: # WHY: no lane is clean, so cross the patch slowly instead of sliding through at full speed
 		want = minf(want, t.patch_speed)
 	_out.throttle = 1.0 if speed < want else 0.0
@@ -150,11 +160,49 @@ func track_side(chariot: Chariot) -> float:
 func _max_curve(track: Track, p: float, preview: float) -> float:
 	var best := 0.0
 	var step := preview / 4.0
-	var f0 := -track.transform_at(p).basis.z
+	var f0 := _flat_dir(track, p)
 	for i in 4:
 		var d := step * (i + 1)
-		var f1 := -track.transform_at(p + d).basis.z
+		var f1 := _flat_dir(track, p + d)
 		best = maxf(best, absf(f0.signed_angle_to(f1, Vector3.UP)) / d)
+	return best
+
+
+## C20: road heading at `p` seen from above (a hill's pitch is not a corner).
+static func _flat_dir(track: Track, p: float) -> Vector3:
+	var f := -track.transform_at(p).basis.z
+	f.y = 0.0
+	return f.normalized() if f.length_squared() > 0.0001 else Vector3.FORWARD
+
+
+## C20: road tilt at `p`: sin of the bank, + = the low (inside) edge is on the right.
+static func _bank_at(track: Track, p: float) -> float:
+	var xf := track.transform_at(p)
+	var f := -xf.basis.z
+	f.y = 0.0
+	if f.length_squared() < 0.0001:
+		return 0.0
+	return xf.basis.y.dot(f.normalized().cross(Vector3.UP))
+
+
+## C20: largest |bank| over the next `preview` m (4 samples, like _max_curve).
+static func _max_bank(track: Track, p: float, preview: float) -> float:
+	var best := 0.0
+	for i in 5:
+		best = maxf(best, absf(_bank_at(track, p + preview * i / 4.0)))
+	return best
+
+
+## C20: sharpest crest (rad/m the road pitches down) in the next `reach` m, 2 m steps. 0 on flat / concave road.
+static func _max_crest(track: Track, p: float, reach: float) -> float:
+	var best := 0.0
+	var prev := (-track.transform_at(p).basis.z).y
+	var d := 2.0
+	while d <= reach:
+		var y := (-track.transform_at(p + d).basis.z).y
+		best = maxf(best, (prev - y) / 2.0)
+		prev = y
+		d += 2.0
 	return best
 
 
@@ -162,7 +210,7 @@ func _update_offset(chariot: Chariot, track: Track, p: float, look: float, delta
 	var t := tuning
 	var half := track.track_width * 0.5 - t.edge_margin
 	var length := track.length()
-	var want := clampf(_bias, -half, half)
+	var want := clampf(_bias + _bank_shift, -half, half)
 	var my_off := track.lateral_offset(chariot.global_position)
 	# Obstacles ahead: other chariots and path-blocking items, as (lateral offset, half width, distance).
 	var obstacles: Array[Vector3] = []

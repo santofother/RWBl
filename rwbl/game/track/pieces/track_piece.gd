@@ -11,8 +11,13 @@ extends Node3D
 ##   PackedByteArray loop]`, `build_curve()`, `chord()`, `end_transform()`, `road_length()`, `flippable`, `line_at`.
 ## C21: `ups` = road normal at every point (UP on flat road), `loop` = 1 where the chariot rides the road surface
 ##   with surface gravity (`_loop()`, a vertical loop). Old callers read only [0] and [1].
+## C20: `_slopes()` (straight ahead with height, from a slope profile) and `_banked_arc()` (a turn tilted towards
+##   its inside). Track takes the road normal from `ups` rotated to stay square to the tangent, so slopes can
+##   leave `ups` at UP.
 # CONTRACT: points start at Vector3.ZERO heading -Z. The next piece starts at end_transform().
 # CONTRACT (C21): the road normal is UP at the first and last point of every piece (joints are flat).
+# CONTRACT (C20): the first and last tangent are level (y = 0), so the next piece starts level; height pieces end at
+#   the height they started (the finish stays at y = 0).
 
 ## Sample spacing of the built centre line (m).
 const STEP := 1.0
@@ -131,3 +136,93 @@ func _loop(radius: float, offset: float) -> void:
 		if i == n:
 			up = Vector3.UP
 		_add(p, tan, up, 1)
+
+
+## C20: drive straight ahead with height. `knots` = Vector2(s m from here, slope dy/ds), s rising from 0; the slope
+## is linear between knots (so the road bends up/down in arcs of constant curvature). Height = the exact integral.
+## Use slope 0 at the first and last knot (CONTRACT: level joints).
+func _slopes(knots: Array[Vector2]) -> void:
+	var length := knots[knots.size() - 1].x
+	var n := maxi(1, ceili(length / STEP))
+	var start := _pts[_pts.size() - 1]
+	for i in range(1, n + 1):
+		var s := length * float(i) / n
+		var h := _height(knots, s)
+		var k := _slope_at(knots, s)
+		_add(start + _dir * s + Vector3.UP * h, (_dir + Vector3.UP * k).normalized())
+
+
+## Height of a slope profile at `s` (see _slopes).
+static func _height(knots: Array[Vector2], s: float) -> float:
+	var h := 0.0
+	for i in range(1, knots.size()):
+		var a := knots[i - 1]
+		var b := knots[i]
+		if s <= a.x:
+			break
+		var e := minf(s, b.x)
+		var f := (e - a.x) / maxf(b.x - a.x, 0.0001)
+		var k_e := lerpf(a.y, b.y, f)
+		h += (a.y + k_e) * 0.5 * (e - a.x) # trapezoid = exact for a linear slope
+	return h
+
+
+static func _slope_at(knots: Array[Vector2], s: float) -> float:
+	for i in range(1, knots.size()):
+		if s <= knots[i].x:
+			var a := knots[i - 1]
+			var b := knots[i]
+			return lerpf(a.y, b.y, (s - a.x) / maxf(b.x - a.x, 0.0001))
+	return knots[knots.size() - 1].y
+
+
+## C20: a banked turn: `ease_len` m straight while the road tilts in, an arc of `radius` m turning `degrees` (to the
+## right if `right`) tilted `bank_deg` towards its inside (outside edge higher), and `ease_len` m straight tilting
+## back to level. The centre line rises by `lift` × sin(tilt) (0 = the road rolls about its centre line).
+## WHY: the tilt-in is a straight of its own: tilting within a few metres bends the outside lane upward so sharply
+## that fast chariots take off.
+func _banked_arc(radius: float, degrees: float, right: bool, bank_deg: float, ease_len: float, lift: float) -> void:
+	var bank := deg_to_rad(bank_deg)
+	var to_centre := _dir.cross(Vector3.UP) * (1.0 if right else -1.0)
+	_tilt_straight(ease_len, bank, to_centre, lift, true)
+	var start := _pts[_pts.size() - 1]
+	var centre := start + to_centre * radius
+	var total := deg_to_rad(degrees) * (-1.0 if right else 1.0)
+	var n := maxi(2, ceili(radius * deg_to_rad(degrees) / STEP))
+	var dir0 := _dir
+	for i in range(1, n + 1):
+		var a := total * float(i) / n
+		var p := centre + (start - centre).rotated(Vector3.UP, a)
+		var inward := Vector3(centre.x - p.x, 0.0, centre.z - p.z).normalized()
+		_add(p, dir0.rotated(Vector3.UP, a), (Vector3.UP * cos(bank) + inward * sin(bank)).normalized())
+	_dir = dir0.rotated(Vector3.UP, total)
+	_tilt_straight(ease_len, bank, _dir.cross(Vector3.UP) * (1.0 if right else -1.0), lift, false)
+
+
+## Straight ahead while the tilt goes 0 -> `bank` (`tilt_in`) or `bank` -> 0, leaning towards `side`.
+func _tilt_straight(length: float, bank: float, side: Vector3, lift: float, tilt_in: bool) -> void:
+	var n := maxi(1, ceili(length / STEP))
+	var start := _pts[_pts.size() - 1]
+	var y0 := start.y - (0.0 if tilt_in else lift * sin(bank))
+	for i in range(1, n + 1):
+		var f := float(i) / n
+		var e := _ease01(f if tilt_in else 1.0 - f)
+		var b := bank * e
+		var de := _ease_slope(f if tilt_in else 1.0 - f) * (1.0 if tilt_in else -1.0) / maxf(length, 0.001)
+		var p := start + _dir * length * f
+		p.y = y0 + lift * sin(b)
+		var tan := (_dir + Vector3.UP * lift * cos(b) * bank * de).normalized()
+		var last := not tilt_in and i == n
+		_add(p, _dir if last else tan, Vector3.UP if last else (Vector3.UP * cos(b) + side * sin(b)).normalized())
+
+
+## Smoothstep 0..1 (clamped), and its derivative.
+static func _ease01(x: float) -> float:
+	x = clampf(x, 0.0, 1.0)
+	return x * x * (3.0 - 2.0 * x)
+
+
+static func _ease_slope(x: float) -> float:
+	if x <= 0.0 or x >= 1.0:
+		return 0.0
+	return 6.0 * x * (1.0 - x)

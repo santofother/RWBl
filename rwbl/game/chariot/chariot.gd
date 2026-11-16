@@ -18,6 +18,12 @@ extends Node3D
 ##   usual thrust/drag plus `loop_slope_gravity` along the climb; steering only slides it sideways. Slower than
 ##   `loop_min_speed` with the road past ~70° (overhead) it falls off, tumbles and dies on landing (cause
 ##   &"loop_fall"). Leaving the zone puts it back on flat-road physics. The cart pitches to follow the road.
+## Slopes (C20): the wheels follow the road's height and normal (ground ray). Gravity along the road slows a
+##   climb and speeds a descent (`slope_gravity`; downhill the top speed rises, `downhill_top_gain`), a tilted
+##   road gives extra sideways grip (`bank_grip`, banked turns). Grounded, the vertical speed is the road's climb
+##   rate; where the road drops away faster than gravity can pull the chariot down (a crest taken fast) it lifts
+##   off (more than `launch_gap` above the road = airborne) and lands further on. The body stays level (yaw only);
+##   the horse and cart models pitch / roll with the road (visual, every peer).
 ##   vars `slot`, `tuning`, `track`, `velocity`, `stamina`, `wheel_state`, `dead`, `frozen`, `cart_angle`,
 ##   `cart_ang_vel`, `grounded`, `surface`, `on_loop` (C21)
 ##   step(input, delta), get_snapshot(), apply_snapshot(s), get_speed(), get_forward(), cart_global_position()
@@ -58,6 +64,8 @@ const HIT_COOLDOWN := 0.3
 const GROUND_SNAP := 0.5
 ## C21: road normal's y below which a too-slow chariot falls off a loop (~70° up the wall and beyond).
 const LOOP_FALL_UP := 0.35
+## C20: the ground ray starts this far above the horses, m.
+const RAY_UP := 2.5
 
 ## Player slot driving this chariot (PlayerInfo.slot). Also the node name `Chariot<slot>`.
 var slot := -1
@@ -106,6 +114,12 @@ var _vis_turn := 0.0
 var _loop_fall := false # C21: fell off a loop, tumbling until it lands (dies)
 var _fall_t := 0.0
 var _cart_pitch := 0.0 # C21: visual, cart tilts along the loop's road
+var _ground_n := Vector3.UP # C20: road normal under the horses at the last ground check
+var _slope_acc := 0.0 # C20: m/s² along the heading from gravity on the slope (+ = downhill), this tick
+var _bank_lat := 0.0 # C20: extra sideways grip accel on a tilted road, this tick
+var _vis_pitch := 0.0 # C20: visual pitch / roll of the models on slopes and banks
+var _vis_roll := 0.0
+var _vis_cart_pitch := 0.0
 
 @onready var _cart: Node3D = $Cart
 @onready var _tint: MeshInstance3D = $Horses
@@ -141,6 +155,8 @@ func step(input: ChariotInput, delta: float) -> void:
 		return
 	_sim_time += delta
 	_tick_timers(delta)
+	_slope_acc = 0.0
+	_bank_lat = 0.0
 	if dead or frozen:
 		velocity = Vector3.ZERO
 		cart_ang_vel = 0.0
@@ -167,6 +183,8 @@ func step(input: ChariotInput, delta: float) -> void:
 	var old_cart_xf := _cart_body.global_transform
 	var stunned := has_effect(Effects.STUN)
 
+	if grounded:
+		_slope_from_ground()
 	# Horses: steering, thrust/brake, sideways grip. Only with hooves on the ground.
 	if grounded:
 		var speed0 := _flat(velocity).dot(get_forward())
@@ -188,8 +206,8 @@ func step(input: ChariotInput, delta: float) -> void:
 		var speed := _flat(velocity).dot(fwd)
 		velocity += fwd * (_drive(speed, input, stunned, delta) - speed)
 		_apply_grip(fwd, prev_speed, delta)
-	else:
-		velocity.y -= t.gravity * delta
+	# C20: gravity always pulls; on the road _follow_ground() puts the wheels back on it (or lets a crest launch)
+	velocity.y -= t.gravity * delta
 
 	_step_cart(cart_surface, delta)
 	_move_horses(delta)
@@ -237,6 +255,8 @@ func apply_snapshot(s: PackedFloat32Array) -> void:
 		_loop_fall = false
 	frozen = _flags & ChariotSnapshot.FLAG_FROZEN != 0
 	grounded = absf(velocity.y) < 0.01 or global_basis.y.y < 0.99 # C21: on a loop the velocity climbs
+	if not grounded and track and track.has_height(): # C20: on a slope the velocity climbs too
+		grounded = global_position.y - _ground_height(global_position) < tuning.launch_gap + 0.05
 	_sync_bodies()
 
 
@@ -303,7 +323,12 @@ func kill(cause: StringName, source_slot: int = -1, item_uid: int = -1) -> void:
 
 
 ## Place the chariot at `xform`, repaired, rested and alive. NET: host (clients follow by snapshot).
+## C20: the body is kept level (only the heading of `xform` is used), so a respawn on a slope is fine.
 func respawn(xform: Transform3D) -> void:
+	var f := -xform.basis.z
+	f.y = 0.0
+	if f.length_squared() > 0.01 and xform.basis.y.y > 0.0:
+		xform.basis = Basis.looking_at(f.normalized(), Vector3.UP)
 	global_transform = xform
 	velocity = Vector3.ZERO
 	cart_angle = 0.0
@@ -319,6 +344,7 @@ func respawn(xform: Transform3D) -> void:
 	on_loop = false
 	_loop_fall = false
 	_cart_pitch = 0.0
+	_ground_n = Vector3.UP
 	_set_solid(true)
 	_effects.clear()
 	_hit_cd.clear()
@@ -437,6 +463,8 @@ func _top_speed() -> float:
 		top *= lerpf(t.tired_speed_mult, 1.0, stamina / maxf(t.tired_threshold, 0.01))
 	if has_effect(Effects.BOOST):
 		top += t.whip_boost * effect_strength(Effects.BOOST)
+	if _slope_acc > 0.0: # C20: downhill the horses run away with the cart
+		top += _slope_acc * t.downhill_top_gain
 	if wheel_state == both:
 		top = minf(top, t.crawl_speed)
 	return maxf(top, 0.5)
@@ -463,6 +491,7 @@ func _drive(speed: float, input: ChariotInput, stunned: bool, delta: float) -> f
 		elif speed > -t.reverse_speed:
 			a -= brake * thrust * 0.4
 	a -= t.drag * speed * (1.0 - throttle)
+	a += _slope_acc # C20: uphill slows, downhill speeds up (and weakens the brake)
 	var s := speed + a * delta
 	if s > top:
 		s = maxf(top, minf(s, speed - t.overspeed_decel * delta))
@@ -489,7 +518,7 @@ func _apply_grip(fwd: Vector3, prev_speed: float, delta: float) -> void:
 		var aim := fwd if flat.dot(fwd) >= 0.0 else -fwd
 		var slip := flat.signed_angle_to(aim, Vector3.UP)
 		var turn := minf(absf(slip) * clampf(grip * t.horse_grip_rate * delta, 0.0, 1.0),
-			grip * t.horse_max_lat_accel / spd * delta)
+			(grip * t.horse_max_lat_accel + _bank_lat) / spd * delta)
 		flat = flat.rotated(Vector3.UP, signf(slip) * turn)
 		flat *= 1.0 - clampf(t.drift_scrub * grip * absf(sin(slip)) * delta, 0.0, 1.0)
 		var cap := maxf(_top_speed(), prev_speed) # throttle mid-drift must not push past top speed
@@ -507,7 +536,8 @@ func _step_cart(cart_surface: StringName, delta: float) -> void:
 	var omega := _yaw_rate + cart_ang_vel # cart yaw speed in the world
 	if grounded:
 		var slip := _hitch_velocity().dot(cr) + omega * length # sideways speed of the axle
-		var dv := _grip_delta(slip, t.grip_for(cart_surface), t.cart_grip_rate, t.cart_max_lat_accel, delta)
+		var cg := t.grip_for(cart_surface)
+		var dv := _grip_delta(slip, cg, t.cart_grip_rate, t.cart_max_lat_accel + _bank_lat / maxf(cg, 0.05), delta)
 		var share := t.cart_pull * t.cart_mass / t.total_mass()
 		omega -= dv * (1.0 - share) / length
 		# WHY: a sliding cart yanks the horses sideways but barely brakes them (drifts keep momentum).
@@ -637,19 +667,28 @@ func _move_horses(delta: float) -> void:
 	global_position.y += velocity.y * delta
 
 
+## C20: wheels on the road. Below the road (gravity pulled us into it, or it climbs) -> snap onto it and take its
+## climb rate as vertical speed. A little above it -> still grounded, just falling towards it. More than
+## `launch_gap` above -> airborne (a crest taken fast, a ledge). Airborne and back down -> land.
 func _follow_ground() -> void:
-	var gy := _ground_height(global_position)
+	var hit := _ground_hit(global_position)
+	var gy: float = hit[0]
 	if grounded:
 		var gap := global_position.y - gy
-		if velocity.y <= 0.01 and gap < GROUND_SNAP and gap > -GROUND_SNAP * 2.0:
+		if gap <= 0.0 and gap > -GROUND_SNAP * 2.0:
 			global_position.y = gy
-			velocity.y = 0.0
-		else:
-			grounded = false # drove off a ledge
+			_ground_n = hit[1]
+			velocity.y = _climb_rate(_ground_n)
+		elif gap > tuning.launch_gap or gap <= -GROUND_SNAP * 2.0:
+			grounded = false # drove off a ledge / flew off a crest
+			if velocity.y > 0.5:
+				print("[Chariot] LAUNCH %d at %.1f m/s up %.1f" % [slot, _flat(velocity).length(), velocity.y])
 	elif velocity.y <= 0.0 and global_position.y <= gy:
 		global_position.y = gy
-		var fall := -velocity.y
-		velocity.y = 0.0
+		_ground_n = hit[1]
+		var rate := _climb_rate(_ground_n)
+		var fall := rate - velocity.y # WHY: landing on a downslope is softer than on the flat
+		velocity.y = rate
 		grounded = true
 		if fall > tuning.hard_landing_speed: # land safely, just lose some speed and wobble the cart
 			velocity *= 1.0 - tuning.landing_speed_loss
@@ -777,9 +816,49 @@ func _query(shape: CollisionShape3D, body_xf: Transform3D) -> PhysicsShapeQueryP
 
 
 func _ground_height(p: Vector3) -> float:
-	var q := PhysicsRayQueryParameters3D.create(p + Vector3.UP, p + Vector3.DOWN * 60.0, Layers.WORLD, _own_rids)
+	return _ground_hit(p)[0]
+
+
+## [height, normal] of the WORLD floor under `p` (-INF, UP if none).
+func _ground_hit(p: Vector3) -> Array:
+	# WHY (C20): start above the wheels, so a road that climbs past a chariot in the air still catches it. Keep it
+	#   under Track.CROSS_CLEARANCE minus a chariot's height (roads passing over each other).
+	var q := PhysicsRayQueryParameters3D.create(p + Vector3.UP * RAY_UP, p + Vector3.DOWN * 60.0, Layers.WORLD,
+		_own_rids)
 	var r := get_world_3d().direct_space_state.intersect_ray(q)
-	return (r["position"] as Vector3).y if not r.is_empty() else -INF
+	if r.is_empty():
+		return [-INF, Vector3.UP]
+	var n: Vector3 = r["normal"]
+	if n.y < 0.0: # WHY: backface hit on a two-sided road slab
+		n = -n
+	var y: float = (r["position"] as Vector3).y
+	# C20: on the road use its exact surface; the triangle mesh of a twisting (banked) road has small kinks that
+	# would kick fast wheels up. The ray still decides whether there is road under us (edges, gaps, loops).
+	if track and track.has_height() and track.is_road_body(r.get("collider")):
+		var g := track.road_ground(p)
+		if absf(float(g[0]) - y) < 0.4 and (g[1] as Vector3).y > 0.2:
+			return g
+	return [y, n if n.y > 0.2 else Vector3.UP]
+
+
+## C20: vertical speed that keeps the wheels on a road with normal `n` at the current flat velocity.
+func _climb_rate(n: Vector3) -> float:
+	if n.y >= 0.9999:
+		return 0.0
+	return -(n.x * velocity.x + n.z * velocity.z) / maxf(n.y, 0.2)
+
+
+## C20: slope gravity along the heading and the bank grip bonus from the last ground normal. NET: host / owner.
+func _slope_from_ground() -> void:
+	var n := _ground_n
+	if n.y >= 0.9999:
+		return
+	var t := tuning
+	var fwd := _flat(get_forward()).normalized()
+	var right := fwd.cross(Vector3.UP)
+	# WHY: gravity's pull along the road = g × (normal's lean towards the heading); + = downhill ahead
+	_slope_acc = t.gravity * t.slope_gravity * n.dot(fwd)
+	_bank_lat = t.bank_grip * t.gravity * absf(n.dot(right))
 
 
 func _surface_at(p: Vector3) -> StringName:
@@ -844,7 +923,8 @@ func _process(delta: float) -> void:
 	var tilted := global_basis.y.y < 0.999 # C21: on a loop
 	_cart_pitch = _loop_cart_pitch() if tilted and not dead and not _loop_fall and track and track.has_loops() \
 		else 0.0
-	_cart.rotation.x = _cart_pitch
+	_slope_visual(tilted, delta)
+	_cart.rotation.x = _cart_pitch if tilted else _vis_cart_pitch
 	_wheel_spin = fmod(_wheel_spin + speed / WHEEL_RADIUS * delta, TAU)
 	if _wheel_l:
 		_wheel_l.rotation.x = -_wheel_spin
@@ -873,8 +953,8 @@ func _process(delta: float) -> void:
 	var pull := clampf(_vis_acc / 8.0, -1.0, 1.0)
 	if _horse_model:
 		_horse_model.position.z = -pull * 0.3
-		_horse_model.rotation.x = -pull * 0.08
-		_horse_model.rotation.z = clampf(_vis_turn * absf(speed) * 0.012, -0.22, 0.22)
+		_horse_model.rotation.x = -pull * 0.08 + _vis_pitch
+		_horse_model.rotation.z = clampf(_vis_turn * absf(speed) * 0.012, -0.22, 0.22) + _vis_roll
 	var gait := clampf(absf(speed) / 6.0, 0.0, 1.0) if grounded else 0.0
 	gait *= 1.0 + maxf(pull, 0.0) * 0.8
 	_gallop = fmod(_gallop + absf(speed) * delta * 0.45, 2.0)
@@ -884,6 +964,28 @@ func _process(delta: float) -> void:
 			var ph := (_gallop + i * 0.4) * PI
 			h.position.y = absf(sin(ph)) * 0.09 * gait
 			h.rotation.x = sin(ph * 2.0) * 0.05 * gait - maxf(pull, 0.0) * 0.12
+
+
+## C20: horses pitch / roll with the road under them, the cart pitches so its axle sits on the road. Visual only,
+## any peer; only on a course with height (two rays).
+func _slope_visual(tilted: bool, delta: float) -> void:
+	var p := 0.0
+	var r := 0.0
+	var cp := 0.0
+	if not tilted and not dead and grounded and track and track.has_height() and is_inside_tree():
+		var hit := _ground_hit(global_position)
+		if float(hit[0]) > -INF and global_position.y - float(hit[0]) < 1.0:
+			var n: Vector3 = global_basis.inverse() * (hit[1] as Vector3)
+			p = atan2(n.z, n.y) # WHY: normal leaning back (+Z) = road climbs ahead = nose up
+			r = -atan2(n.x, n.y)
+		var axle := cart_global_position()
+		var gy := _ground_height(axle)
+		if gy > -INF and absf(gy - global_position.y) < 3.0:
+			cp = atan2(global_position.y - gy, HITCH_OFFSET + tuning.hitch_length)
+	var k := clampf(12.0 * delta, 0.0, 1.0)
+	_vis_pitch = lerpf(_vis_pitch, clampf(p, -0.6, 0.6), k)
+	_vis_roll = lerpf(_vis_roll, clampf(r, -0.6, 0.6), k)
+	_vis_cart_pitch = lerpf(_vis_cart_pitch, clampf(cp, -0.6, 0.6), k)
 
 
 func _collect_team_surfaces() -> void:

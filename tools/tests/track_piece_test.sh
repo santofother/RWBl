@@ -8,6 +8,9 @@
 # (3) C21 loop: unit scene game/track/tests/loop_test.tscn (loop shape, fast chariot rides it upside down, slow one
 #     falls off and dies, client interpolation through the roll, build path check); 3 bots race a course with a
 #     loop at joint 2 and all finish.
+# (4) C20 hills: unit scene game/track/tests/hills_test.tscn (hill / crest / banked turn shapes, finish back at
+#     y = 0, uphill slower than flat, downhill past top speed, fast chariot flies off the crest and lands, slow one
+#     stays on, bank grip holds the line); 3 bots race a course with a hill, a crest and a banked turn and all finish.
 set -u
 source "$(dirname "$0")/lib.sh"
 echo "Logs: $OUT"
@@ -18,6 +21,10 @@ TEST_SCENE=res://game/match/match.tscn launch_peer solo --no-human --bots=3 --ph
 TEST_SCENE=res://game/track/tests/loop_test.tscn launch_peer loopunit --quit-after=60
 TEST_SCENE=res://game/match/match.tscn launch_peer loopbots --no-human --bots=3 --phase=build --rounds=1 \
 	--phase-time=90 --no-bot-build '--test-place=piece_loop@2,1,0,0' --quit-after=110
+TEST_SCENE=res://game/track/tests/hills_test.tscn launch_peer hillunit --quit-after=60
+TEST_SCENE=res://game/match/match.tscn launch_peer hillbots --no-human --bots=3 --phase=build --rounds=1 \
+	--phase-time=100 --no-bot-build '--test-place=piece_hill@2,1,0,0;piece_crest@4,1,0,0;piece_banked@9,-1,0,0' \
+	--quit-after=125
 TEST_SCENE=res://game/lobby/main.tscn launch_peer host --host --name=Host --lobby-autostart=2 --no-fill-bots --free-build \
 	--rounds=1 --phase-time=8 "--discovery-port=$((PORT + 1))" '--test-place=piece_hairpin@2,-1,0' --quit-after=170
 wait_log host '\[Net\] Hosting' 15 || exit 1
@@ -28,6 +35,8 @@ wait_log client '\[TEST\] PLACE 1 ' 40 || fail=1
 wait_log solo '\[Race\] OVER' 140 || fail=1
 wait_log loopbots '\[Race\] OVER' 30 || fail=1
 wait_log loopunit 'LOOP UNIT (PASSED|FAILED)' 5 || fail=1
+wait_log hillbots '\[Race\] OVER' 30 || fail=1
+wait_log hillunit 'HILLS UNIT (PASSED|FAILED)' 5 || fail=1
 sleep 1
 cleanup_peers; sleep 0.5
 grep -E '^\[(TEST|Build|Track|Race)\]' "$OUT/solo.log" | grep -v '^\[Build\] PATH'
@@ -61,6 +70,11 @@ assert_log loopunit '^\[TEST\] LOOP UNIT PASSED$' && echo "  ok   loop unit chec
 assert_log loopbots '^\[TEST\] PLACE 0 piece_loop -> OK$' && echo "  ok   loop placed" || fail=1
 assert_log loopbots '^\[Race\] OVER order=\[[0-9], [0-9], [0-9]\] finished=3' && echo "  ok   3 bots finished over the loop" || fail=1
 if grep -q 'LOOP FALL' "$OUT/loopbots.log"; then echo "  FAIL a bot fell off the loop"; fail=1; fi
+echo "--- hills"; grep -E '^\[TEST\] (FAIL|HILLS|piece|hill|crest|banked)' "$OUT/hillunit.log"
+grep -E '^\[(TEST|Race)\]|LAUNCH' "$OUT/hillbots.log"
+assert_log hillunit '^\[TEST\] HILLS UNIT PASSED$' && echo "  ok   hills unit checks" || fail=1
+for i in 0 1 2; do assert_log hillbots "^\[TEST\] PLACE $i piece_[a-z]+ -> OK\$" || fail=1; done
+assert_log hillbots '^\[Race\] OVER order=\[[0-9], [0-9], [0-9]\] finished=3' && echo "  ok   3 bots finished over hill, crest, banked turn" || fail=1
 assert_clean_logs || fail=1
 if [ $fail -eq 0 ]; then echo "TRACK PIECE TEST PASSED"; else echo "TRACK PIECE TEST FAILED (see $OUT)"; fi
 exit $fail

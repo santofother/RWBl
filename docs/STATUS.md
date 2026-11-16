@@ -31,7 +31,7 @@ DONE (on main, date) · BLOCKED (reason)
 | C23 | Race to the finish line (no laps, shortcuts count) | 4 | Either · T2 | C22 | DONE 2026-11-15 | c22-modular-course (with C22) |
 | C24 | Playtest fixes: draft, build pan/cursors/previews, deadly pit/axe, respawn wait, spectate, scoring | 4 | Claude (head) · T2 | C23 | DONE 2026-11-15 | c24-playtest-fixes |
 | C25 | Chaos items: bumper, lion dung, whirlwind, catapult, spiked log | 4 | Claude Sonnet · T3 | C10 | DONE 2026-11-15 | c25-chaos-items (merged via c24) |
-| C20 | Track pieces: hills, crest, banked turn | 4 | Claude pref · T2 | C22, C23 | READY | |
+| C20 | Track pieces: hills, crest, banked turn | 4 | Claude pref · T2 | C22, C23 | REVIEW (needs merge session: bot_soak_test fails, also on main 736d41d: all-crashed rounds) | c20-hills |
 | C21 | Track piece: spiral loop | 4 | Claude only · T1 | C20 | DONE 2026-11-15 | c21-loop (built before C20; + compact finish card, respawn behind passer) |
 | P1 | Playtest 1 (user + friends) | — | user | wave 3 | TODO | |
 | C15 | Triage + plan waves 4+ | — | Claude only · T1 | P1 | TODO | |

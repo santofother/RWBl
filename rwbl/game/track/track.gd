@@ -24,6 +24,12 @@ extends Node3D
 ##   none), road_transform_at(progress) (full 3D road frame: -Z along the road, +Y = road normal, so upside down at
 ##   a loop's top). Inside a loop zone transform_at() returns that same frame; everywhere else it is flat as
 ##   before. No items, respawns or crow drops inside a loop (is_in_no_build_zone, respawn_transform).
+## Height (C20): pieces may climb, dip and bank (hill, crest, banked turn); joints stay level and height pieces end
+##   where they started, so the finish stays at y = 0. has_height() -> bool. transform_at() returns the road
+##   frame everywhere (+Y = road normal, -Z along the road, so it pitches on slopes and rolls on banks): items
+##   placed with it sit on the road surface. Without `pit` the road gets a WORLD floor too once the course has
+##   height (the flat ground stays below). road_ground(pos) -> [height, normal] (exact road surface, for wheels),
+##   is_road_body(body).
 ##   Joint k is the boundary before piece k. Inserting is allowed at joints 1 .. n-1 (after the start piece, up to
 ##   just before the finish piece). Everything after the joint moves rigidly; last_change() gives that transform.
 # CONTRACT: API above. Progress increases in the driving direction; the start line is progress 0 and never moves.
@@ -76,6 +82,9 @@ var _last_change: Dictionary = {}
 var _dense_off := PackedFloat32Array() # C21: curve offset of every composed point
 var _dense_up := PackedVector3Array() # C21: road normal at every composed point (local)
 var _loop_zones: Array[Vector2] = [] # C21: progress spans with loop flags
+var _has_height := false # C20: some point off y = 0 or tilted
+var _low_y := 0.0 # C20: lowest road edge (local), <= 0
+var _road_bodies: Array[Object] = [] # C20: StaticBody3Ds whose collision is the road surface
 
 
 func _ready() -> void:
@@ -119,17 +128,11 @@ func point_at(progress: float) -> Vector3:
 	return to_global(_curve.sample_baked(_off(progress)))
 
 
-## Transform on the centre line at `progress`, -Z facing the driving direction. Flat (+Y = UP) except inside a
-## loop zone (C21), where it is road_transform_at().
+## Transform on the centre line at `progress`, -Z facing the driving direction, +Y = road normal (C20: the road
+## frame, same as road_transform_at(); UP on level road, pitched on slopes, rolled on banks, upside down at a
+## loop's top).
 func transform_at(progress: float) -> Transform3D:
-	if not _loop_zones.is_empty() and loop_index_at(progress) >= 0:
-		return road_transform_at(progress)
-	var lt := _local_off_t(_off(progress))
-	var dir := global_transform.basis * (-lt.basis.z)
-	dir.y = 0.0
-	if dir.length_squared() < 0.0001:
-		dir = Vector3.FORWARD
-	return Transform3D(Basis.looking_at(dir.normalized(), Vector3.UP), to_global(lt.origin))
+	return road_transform_at(progress)
 
 
 ## Signed distance from the centre line (+ = right of the driving direction).
@@ -230,6 +233,29 @@ func loop_index_at(progress: float) -> int:
 ## Equals transform_at() on flat road.
 func road_transform_at(progress: float) -> Transform3D:
 	return global_transform * _local_road_t(_off(progress))
+
+
+## C20: true if any part of the course leaves y = 0 or tilts (hills, crests, banked turns, loops).
+func has_height() -> bool:
+	return _has_height
+
+
+## C20: the exact road surface under `pos` (world): [height (float), normal (Vector3)], from the road frame at
+## progress_at(pos). Smooth, unlike the road's triangle mesh (a banked road's quads are twisted). Off the road
+## the plane just continues.
+func road_ground(pos: Vector3) -> Array:
+	var xf := road_transform_at(progress_at(pos))
+	var n := xf.basis.y
+	if n.y < 0.2:
+		return [xf.origin.y, n]
+	# plane through xf.origin with normal n, solved for y at pos.x / pos.z
+	var y := xf.origin.y - (n.x * (pos.x - xf.origin.x) + n.z * (pos.z - xf.origin.z)) / n.y
+	return [y, n]
+
+
+## C20: true if `body` is the road's own collision (pit slab / RoadFloor), not the flat ground or an item.
+func is_road_body(body: Object) -> bool:
+	return body != null and _road_bodies.has(body)
 
 
 ## World-space box containing the whole course (build camera, validation grid).
@@ -603,6 +629,15 @@ func _index_dense(o: Dictionary) -> void:
 	for k in n:
 		_dense_off[k] = cum[k] * k_len
 	_dense_up = o["up"]
+	_has_height = false
+	_low_y = 0.0
+	var pos: PackedVector3Array = o["pos"]
+	for j in n:
+		var u := _dense_up[j]
+		if absf(pos[j].y) > 0.05 or u.y < 0.999:
+			_has_height = true
+		# lowest road edge (a banked road's inside edge dips below its centre line)
+		_low_y = minf(_low_y, pos[j].y - track_width * 0.5 * Vector2(u.x, u.z).length())
 	_loop_zones.clear()
 	var loop: PackedByteArray = o["loop"]
 	var k := 0
@@ -628,12 +663,13 @@ func _compute_bounds() -> void:
 	var lo := Vector3(INF, 0.0, INF)
 	var hi := Vector3(-INF, 0.0, -INF)
 	for p in pts:
-		lo.x = minf(lo.x, p.x)
-		lo.z = minf(lo.z, p.z)
-		hi.x = maxf(hi.x, p.x)
-		hi.z = maxf(hi.z, p.z)
+		lo = lo.min(p)
+		hi = hi.max(p)
 	var m := track_width * 0.5 + wall_thickness + 1.0
-	_bounds_local = AABB(Vector3(lo.x - m, -1.0, lo.z - m), Vector3(hi.x - lo.x + 2.0 * m, 2.0, hi.z - lo.z + 2.0 * m))
+	# C20: y spans the course's height (at least -1 .. 1 as before)
+	var y0 := minf(lo.y, 0.0) - 1.0
+	var y1 := maxf(hi.y, 0.0) + 1.0
+	_bounds_local = AABB(Vector3(lo.x - m, y0, lo.z - m), Vector3(hi.x - lo.x + 2.0 * m, y1 - y0, hi.z - lo.z + 2.0 * m))
 
 
 # ---------------------------------------------------------------- generated visuals + collision
@@ -652,6 +688,8 @@ func _build_visuals() -> void:
 	else:
 		var ground := StaticBody3D.new()
 		ground.name = "Ground"
+		# C20: below the lowest road edge (a banked turn's inside edge dips under y = 0)
+		ground.position.y = minf(0.0, _low_y - 0.3) if _has_height else 0.0
 		ground.collision_layer = Layers.WORLD
 		ground.collision_mask = 0
 		var shape := CollisionShape3D.new()
@@ -666,6 +704,7 @@ func _build_visuals() -> void:
 		ground.add_child(sand)
 		_add_visual(ground)
 
+	_road_bodies.clear()
 	var steps := maxi(int(_curve_len / MESH_STEP), 8)
 	var h := track_width * 0.5
 	var road := SurfaceTool.new()
@@ -678,8 +717,9 @@ func _build_visuals() -> void:
 		# C21: the road frame (normal = road up) so a loop's road stands up and turns over
 		var t0 := _local_road_t(_curve_len * i / steps)
 		var t1 := _local_road_t(_curve_len * (i + 1) / steps)
-		_quad(road, t0.origin - t0.basis.x * h, t1.origin - t1.basis.x * h, t0.origin + t0.basis.x * h,
-			t1.origin + t1.basis.x * h, t0.basis.y, 0.02)
+		# C20: two halves meeting on the centre line, so a twisting (banked) road stays close to its true surface
+		_quad(road, t0.origin - t0.basis.x * h, t1.origin - t1.basis.x * h, t0.origin, t1.origin, t0.basis.y, 0.02)
+		_quad(road, t0.origin, t1.origin, t0.origin + t0.basis.x * h, t1.origin + t1.basis.x * h, t0.basis.y, 0.02)
 		if pit: # slab sides + underside so the road reads as a floating bridge
 			var down := -t0.basis.y * slab_depth
 			for side: float in [-1.0, 1.0]:
@@ -725,7 +765,20 @@ func _build_visuals() -> void:
 		tri.backface_collision = true
 		floor_shape.shape = tri
 		walls.add_child(floor_shape)
+		_road_bodies.append(walls)
 	_add_visual(walls)
+	if not pit and _has_height: # C20: the flat ground can't carry a hill; the road itself is the floor
+		var floor_body := StaticBody3D.new()
+		floor_body.name = "RoadFloor"
+		floor_body.collision_layer = Layers.WORLD
+		floor_body.collision_mask = 0
+		var fs := CollisionShape3D.new()
+		var ftri := road_mi.mesh.create_trimesh_shape()
+		ftri.backface_collision = true
+		fs.shape = ftri
+		floor_body.add_child(fs)
+		_add_visual(floor_body)
+		_road_bodies.append(floor_body)
 
 	_add_line("StartLine", _start_off, Color.WHITE)
 	_add_line("FinishLine", _finish_off, Color(0.1, 0.1, 0.1))

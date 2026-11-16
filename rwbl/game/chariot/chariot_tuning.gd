@@ -71,6 +71,12 @@ extends Resource
 @export_range(0.0, 1.0) var loop_slope_gravity := 0.7 # TUNE: share of gravity that slows the climb / speeds the drop (0.7: full speed or a whip makes it; 0.8: only a whip)
 @export_range(0.0, 10.0) var loop_steer_speed := 3.0 # TUNE: m/s sideways at full steer inside a loop
 @export_range(0.5, 5.0) var loop_fall_time := 2.5 # TUNE: s of falling off a loop before it counts as a crash anyway
+@export_group("Slopes")
+## C20: hills, crests and banked turns (Track pieces with height).
+@export_range(0.0, 1.5) var slope_gravity := 0.6 # TUNE: share of gravity along the road: uphill slows, downhill speeds up, braking is weaker downhill
+@export_range(0.0, 5.0) var downhill_top_gain := 1.5 # TUNE: s; downhill top speed rises by this × the downhill accel (0 = downhill never beats top speed)
+@export_range(0.0, 2.0) var bank_grip := 0.8 # TUNE: extra sideways grip on a tilted road, × gravity × sin(tilt) (banked turns hold speed)
+@export_range(0.02, 1.0) var launch_gap := 0.15 # TUNE: m the road may drop away under the wheels before the chariot counts as airborne (crest jumps)
 @export_group("Collisions")
 @export_range(0.0, 1.0) var bounce := 0.3 # TUNE: restitution vs walls and chariots
 @export_range(0.0, 10.0) var hit_min_speed := 1.0 # TUNE: m/s, slower touches don't emit hit()
