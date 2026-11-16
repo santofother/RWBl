@@ -29,7 +29,7 @@ Each round has four phases:
 |---|---|---|---|
 | Draft | UI | ~10s | Each player is dealt 3 random cards (items and track pieces mixed) and keeps 1 |
 | Build | Top-down | ~25s | Each player places their one card (item or track piece) on the track, all at once |
-| Race | Third person behind chariot | ~60-90s | 1-2 laps |
+| Race | Third person behind chariot | ~60-90s | One run from the start line to the finish line |
 | Score | UI | ~10s | Animated vertical bar chart: each player's bar climbs by this round's points toward the win line, overtakes re-sort, next round |
 
 - **No round cap.** Rounds repeat until someone wins.
@@ -106,10 +106,13 @@ Every item has tags (`flammable`, `slippery`, `heavy`, `hot`, `living`) so inter
 - Items cannot be placed on the start or finish line, and items need a minimum gap.
 - **Track validation:** the host checks that a drivable path still exists after each placement (flood fill on the track surface or a navigation check) and rejects placements that block it.
 
-### 5.6 Track pieces (planned, wave 4+)
-Besides items, the track itself can change shape. A track piece replaces a section of the road. Pieces are
-drafted like items (same cards, same rarity weights) and placed in the Build phase, so the track grows and
-changes every round. Pieces stay for the rest of the match, like items.
+### 5.6 Track pieces (changed 2026-11-15: modular point-to-point course)
+The track is a **course built out of pieces**, raced once **from a start line to a separate finish line** (no laps).
+Round 1 starts with a short base course: **start piece, a few straights and corners, finish piece**. Track
+pieces are drafted like items (same cards, same rarity weights) and placed in the Build phase: a player
+**inserts a piece at any joint between two pieces, or adds it at the end just before the finish**. Everything
+after the joint moves along, so the course grows every round. Pieces stay for the rest of the match, like items.
+Basic pieces: straight, left corner, right corner (base course and common cards).
 | Piece | Effect |
 |---|---|
 | Sharp turn / hairpin | Tight corner, punishes speed, the cart swings wide |
@@ -119,8 +122,11 @@ changes every round. Pieces stay for the rest of the match, like items.
 | Banked turn | Lets you hold speed through a corner |
 | Spiral loop | Drive up and around a loop, upside down at the top. Too slow and you fall off |
 
-- Pieces keep the track a closed loop. The start/finish straight can't be changed.
-- Bots, checkpoints, the no-build zone and the blocked-road check follow the new shape.
+- The start piece and the finish piece can't be removed or have anything inserted inside them.
+- A piece can't be inserted where the course would run into itself (until hills/bridges allow crossings).
+- **Shortcuts are allowed:** jumping off the road onto a later part of the course counts. Race position is how
+  far along the course you are; you finish when you reach the finish line.
+- Bots, the no-build zone and the blocked-road check follow the new shape.
 - Build order: shape and turns first, then hills, then loops. Loops need the chariot to stick to the road
   (gravity along the road surface) and a camera that rolls with it.
 
@@ -131,11 +137,10 @@ changes every round. Pieces stay for the rest of the match, like items.
 |---|---|
 | Finish 1st / 2nd / 3rd / 4th / 5th | 150 / 100 / 70 / 40 / 0 |
 | Your trap hits another player | +30 each (max 90 per round) |
-| Each lap completed | +25 |
 | Fewest deaths this round (ties all get it) | +50 |
 | Each kill (spear, wheel or ram; not your trap) | +60 |
 | Die to your own trap | -30 |
-| Clean lap (no collisions) | +25 |
+| Clean run (no collisions the whole race) | +25 |
 | Last to finish | +25 mercy points |
 | **Nobody passes your item, or everyone dies to it** | 0 for that item |
 
@@ -237,7 +242,7 @@ One Steam app for the whole hub, with each game as a mode, is the simplest. Sepa
 2. Does the mage game already have lobby and netcode? If so, how reusable is it as the party core?
 3. Which Godot version and which GodotSteam build is the mage game using? Both projects should match.
 4. One Steam app or several?
-5. How many tracks or arenas ship at launch, and is the track a fixed arena or a loop?
+5. How many tracks or arenas ship at launch, and is the track a fixed arena or a loop? (2026-11-15: a modular point-to-point course, §5.6)
 6. AI chariots to fill empty slots, or only real players?
 7. Cross-game progression (unlocks, currency) in the hub: in scope for v1 or later?
 8. ~~Track pieces (§5.6): who places them?~~ **Decided:** drafted with items and placed in the Build phase,

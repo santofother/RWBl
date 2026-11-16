@@ -27,7 +27,9 @@ DONE (on main, date) · BLOCKED (reason)
 | C17 | Demolish card (remove a placed item) | 4 | Either · T2 | C08, C10 | DONE 2026-11-14 | c17-demolish (user OK to land; ItemDef.targets_placed still to approve) |
 | C18 | Score screen v2: vertical stacked bars to the 1000 line | 4 | Either · T2 | C16 | DONE 2026-11-14 | c18-score-bars |
 | C19 | Track pieces framework + hairpin, chicane | 4 | Claude pref · T1 | C16, C17 | DONE 2026-11-14 | c19-track-pieces |
-| C20 | Track pieces: hills, crest, banked turn | 4 | Claude pref · T2 | C19 | READY | |
+| C22 | Modular point-to-point course (pieces at joints) | 4 | Claude pref · T1 | C19 | READY | user decision 2026-11-15 |
+| C23 | Race to the finish line (no laps, shortcuts count) | 4 | Either · T2 | C22 | TODO | |
+| C20 | Track pieces: hills, crest, banked turn | 4 | Claude pref · T2 | C22, C23 | TODO | |
 | C21 | Track piece: spiral loop | 4 | Claude only · T1 | C20 | TODO | |
 | P1 | Playtest 1 (user + friends) | — | user | wave 3 | TODO | |
 | C15 | Triage + plan waves 4+ | — | Claude only · T1 | P1 | TODO | |
